@@ -1,7 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import { Briefcase, MapPin, Phone, Star, Filter, ToggleLeft, ToggleRight, Map, Users, TrendingUp, Volume2 } from 'lucide-react';
-import AudioPlayer from './AudioPlayer';
+import { Briefcase, MapPin, Phone, Star, Filter, ToggleLeft, ToggleRight, CheckCircle2 } from 'lucide-react';
 import { TRANSLATIONS } from '../constants';
 import { storageService } from '../services/storageService';
 import { Language, User, Job } from '../types';
@@ -14,13 +13,11 @@ interface DashboardProps {
 
 const WorkerDashboard: React.FC<DashboardProps> = ({ language, currentUser, onUpdateAvailability }) => {
     const t = TRANSLATIONS[language];
-    const [radius, setRadius] = useState<number>(10); // Default 10km for workers
-    const [sortBy, setSortBy] = useState<'nearest' | 'wage' | 'rating'>('nearest');
+    const [radius, setRadius] = useState<number>(25);
+    const [sortBy, setSortBy] = useState<'nearest' | 'rating'>('nearest');
     const [realJobs, setRealJobs] = useState<Job[]>([]);
     const [loading, setLoading] = useState(false);
     const [isAvailable, setIsAvailable] = useState<boolean>(currentUser.available ?? true);
-    const [selectedJob, setSelectedJob] = useState<string | null>(null);
-    const [groupSize, setGroupSize] = useState<number>(1);
 
     useEffect(() => {
         let isMounted = true;
@@ -29,7 +26,7 @@ const WorkerDashboard: React.FC<DashboardProps> = ({ language, currentUser, onUp
             if (isInitial) setLoading(true);
             try {
                 const jobs = await storageService.getJobs(currentUser.lat, currentUser.lng, radius);
-                if (isMounted) setRealJobs(jobs);
+                if (isMounted) setRealJobs(jobs.filter(j => j.status === 'OPEN'));
             } catch (e) {
                 console.error("Error fetching jobs", e);
             } finally {
@@ -58,220 +55,136 @@ const WorkerDashboard: React.FC<DashboardProps> = ({ language, currentUser, onUp
         }
     };
 
-    const handleApply = (jobId: string) => {
-        const job = realJobs.find(j => j.id === jobId);
-        if (job) {
-            const message = groupSize > 1
-                ? `Applied for ${job.workType} with ${groupSize} workers!`
-                : `Applied for ${job.workType}!`;
-            alert(message);
-            setSelectedJob(null);
-            setGroupSize(1);
+    const handleCallFarmer = (farmerPhone: string) => {
+        if (farmerPhone) {
+            window.location.href = `tel:${farmerPhone}`;
+        } else {
+            alert("Farmer phone number not available.");
         }
     };
 
-    const handleCallFarmer = (farmerName: string) => {
-        alert(`Calling Farmer: ${farmerName}`);
+    const handleApplyJob = async (job: Job) => {
+        if (confirm(`Do you want to apply for ${job.workType} at ₹${job.wage}/day?`)) {
+            // Instant local UI update
+            setRealJobs(prev => prev.filter(j => j.id !== job.id));
+
+            await storageService.updateJobStatus(job.id, 'FILLED');
+            alert("Applied successfully! The farmer has been notified.");
+        }
     };
 
     const handleOpenMap = (lat: number, lng: number) => {
         window.open(`https://www.google.com/maps/search/?api=1&query=${lat},${lng}`, '_blank');
     };
 
-    // Enhanced sorting with wage
     const jobs = [...realJobs].sort((a, b) => {
         if (sortBy === 'nearest') return a.distance - b.distance;
-        if (sortBy === 'wage') return b.wage - a.wage; // Highest wage first
         if (sortBy === 'rating') return b.rating - a.rating;
         return 0;
     });
 
     return (
         <div className="pb-24">
-            {/* Header */}
-            <div className="bg-white/80 backdrop-blur-sm px-5 py-4 shadow-soft border-b border-agri-gray-100 flex justify-between items-center sticky top-16 z-30">
-                <h1 className="font-bold text-xl text-agri-gray-900 flex items-center">
-                    <Briefcase className="mr-2 text-agri-green-500 h-6 w-6" /> Find Jobs
+            {/* Simple Header for Worker Context */}
+            <div className="bg-white/80 backdrop-blur-sm px-4 py-3 shadow-sm border-b border-gray-100 flex justify-between items-center sticky top-16 z-30">
+                <h1 className="font-bold text-xl text-gray-800 flex items-center">
+                    <Briefcase className="mr-2 text-amber-500 h-6 w-6" /> Find Jobs
                 </h1>
 
                 {/* Availability Toggle */}
                 <button
                     onClick={handleToggleAvailability}
-                    className={`flex items-center px-4 py-2 rounded-full text-xs font-bold transition-all shadow-sm ${isAvailable ? 'bg-green-100 text-green-700 border-2 border-green-300' : 'bg-red-100 text-red-700 border-2 border-red-300'}`}
+                    className={`flex items-center px-3 py-1.5 rounded-full text-xs font-bold transition-all ${isAvailable ? 'bg-green-100 text-green-700 ring-1 ring-green-300' : 'bg-red-100 text-red-700 ring-1 ring-red-300'}`}
                 >
-                    {isAvailable ? 'Available' : 'Not Available'}
+                    {isAvailable ? 'I am Available' : 'Not Available'}
                     {isAvailable ? <ToggleRight className="ml-2 h-5 w-5" /> : <ToggleLeft className="ml-2 h-5 w-5" />}
                 </button>
             </div>
 
             {/* Filters */}
-            <div className="bg-white/80 backdrop-blur-sm px-4 py-4 mb-2 shadow-sm border-b border-agri-gray-100">
-                <div className="flex items-center justify-between mb-3">
-                    <h3 className="font-bold text-agri-gray-800">Sort By:</h3>
-                    <span className="text-xs text-agri-gray-500">{jobs.length} jobs found</span>
+            <div className="bg-white/60 backdrop-blur-sm px-4 py-4 mb-2 shadow-sm">
+                <div className="flex space-x-4 mb-4">
+                    <label className="flex items-center space-x-2 cursor-pointer bg-white px-3 py-1.5 rounded-lg border border-gray-200 shadow-sm">
+                        <input type="radio" name="sortW" className="accent-amber-500 w-4 h-4" checked={sortBy === 'nearest'} onChange={() => setSortBy('nearest')} />
+                        <span className="text-sm font-medium text-gray-700">{t.nearest}</span>
+                    </label>
+                    <label className="flex items-center space-x-2 cursor-pointer bg-white px-3 py-1.5 rounded-lg border border-gray-200 shadow-sm">
+                        <input type="radio" name="sortW" className="accent-amber-500 w-4 h-4" checked={sortBy === 'rating'} onChange={() => setSortBy('rating')} />
+                        <span className="text-sm font-medium text-gray-700">{t.rating}</span>
+                    </label>
                 </div>
-
-                <div className="flex space-x-2 mb-4 overflow-x-auto pb-2">
-                    <button
-                        onClick={() => setSortBy('nearest')}
-                        className={`px-4 py-2 rounded-xl text-sm font-bold whitespace-nowrap transition-all ${sortBy === 'nearest' ? 'bg-agri-green-500 text-white shadow-green' : 'bg-agri-gray-100 text-agri-gray-600 hover:bg-agri-gray-200'}`}
-                    >
-                        <MapPin className="h-4 w-4 inline mr-1" />
-                        Nearest
-                    </button>
-                    <button
-                        onClick={() => setSortBy('wage')}
-                        className={`px-4 py-2 rounded-xl text-sm font-bold whitespace-nowrap transition-all ${sortBy === 'wage' ? 'bg-agri-green-500 text-white shadow-green' : 'bg-agri-gray-100 text-agri-gray-600 hover:bg-agri-gray-200'}`}
-                    >
-                        <TrendingUp className="h-4 w-4 inline mr-1" />
-                        Highest Wage
-                    </button>
-                    <button
-                        onClick={() => setSortBy('rating')}
-                        className={`px-4 py-2 rounded-xl text-sm font-bold whitespace-nowrap transition-all ${sortBy === 'rating' ? 'bg-agri-green-500 text-white shadow-green' : 'bg-agri-gray-100 text-agri-gray-600 hover:bg-agri-gray-200'}`}
-                    >
-                        <Star className="h-4 w-4 inline mr-1" />
-                        Top Rated
-                    </button>
-                </div>
-
-                <div className="flex items-center gap-2">
-                    <span className="text-xs font-bold text-agri-gray-600">Radius:</span>
-                    <div className="flex space-x-2 flex-1 overflow-x-auto">
-                        {[5, 10, 25, 50].map(r => (
-                            <button
-                                key={r}
-                                onClick={() => setRadius(r)}
-                                className={`px-3 py-1.5 rounded-full text-xs font-bold border-2 transition-all whitespace-nowrap ${radius === r ? 'bg-agri-green-500 border-agri-green-500 text-white shadow-md' : 'bg-white border-agri-gray-200 text-agri-gray-600 hover:border-agri-green-300'}`}
-                            >
-                                {r} km
-                            </button>
-                        ))}
-                    </div>
+                <div className="flex space-x-2 overflow-x-auto no-scrollbar pb-1">
+                    {[10, 25, 50, 100].map(r => (
+                        <button
+                            key={r}
+                            onClick={() => setRadius(r)}
+                            className={`px-4 py-1.5 rounded-full text-xs font-bold border transition-all whitespace-nowrap ${radius === r ? 'bg-amber-500 border-amber-500 text-white shadow-md' : 'bg-white border-gray-200 text-gray-500 hover:bg-amber-50'}`}
+                        >
+                            {r} {t.km}
+                        </button>
+                    ))}
                 </div>
             </div>
 
             {/* Job Feed */}
             <div className="px-4 space-y-4 mt-4">
                 {loading ? (
-                    <div className="text-center py-10 text-agri-gray-500">Loading jobs...</div>
+                    <div className="text-center py-10 font-bold text-gray-400 uppercase tracking-widest text-xs">Loading...</div>
                 ) : jobs.length === 0 ? (
-                    <div className="text-center py-12 bg-white/50 backdrop-blur-sm rounded-2xl border-2 border-dashed border-agri-gray-200">
-                        <Filter className="h-12 w-12 text-agri-gray-300 mx-auto mb-3" />
-                        <p className="text-agri-gray-600 font-medium">No jobs found in this area</p>
-                        <p className="text-sm text-agri-gray-500 mt-1">Try increasing the search radius</p>
+                    <div className="text-center py-12 bg-white/50 backdrop-blur-sm rounded-2xl mx-4 border border-dashed border-gray-200">
+                        <Filter className="h-10 w-10 text-gray-300 mx-auto mb-2" />
+                        <p className="text-gray-500 font-bold text-xs">{t.noResults}</p>
+                        <p className="text-[10px] text-gray-400 mt-2">Farmers post new jobs every day. Check back soon!</p>
                     </div>
                 ) : (
                     jobs.map(job => (
-                        <div key={job.id} className="bg-white rounded-2xl shadow-soft border-2 border-agri-gray-100 hover:border-agri-green-300 transition-all overflow-hidden">
-                            {/* Job Header */}
-                            <div className="p-5">
-                                <div className="flex justify-between items-start mb-3">
-                                    <div className="flex-1">
-                                        <h3 className="font-bold text-agri-gray-900 text-lg leading-tight">{job.workType}</h3>
-                                        <p className="text-agri-green-600 font-semibold text-sm mt-1">{job.farmerName}</p>
-                                    </div>
-                                    <div className="bg-gradient-to-r from-green-50 to-green-100 text-green-700 px-4 py-2 rounded-xl text-base font-bold shadow-sm border-2 border-green-200">
-                                        ₹{job.wage}/day
-                                    </div>
+                        <div key={job.id} className="bg-white/90 backdrop-blur-sm p-5 rounded-3xl shadow-sm border border-white/50 hover:border-amber-300 transition-all group active:scale-[0.99]">
+                            <div className="flex justify-between items-start mb-3">
+                                <div>
+                                    <h3 className="font-extrabold text-gray-900 text-xl leading-tight">{job.workType}</h3>
+                                    <p className="text-amber-600 font-black text-sm mt-0.5">{job.farmerName}</p>
                                 </div>
-
-                                <div className="flex items-center flex-wrap gap-3 text-sm text-agri-gray-600 mb-4">
-                                    <div className="flex items-center bg-agri-gray-50 px-3 py-1.5 rounded-lg">
-                                        <MapPin className="h-4 w-4 mr-1.5 text-agri-green-500" />
-                                        <span className="font-semibold">{job.distance} km away</span>
-                                    </div>
-                                    <div className="flex items-center bg-agri-gray-50 px-3 py-1.5 rounded-lg">
-                                        <Star className="h-4 w-4 mr-1.5 text-yellow-400 fill-current" />
-                                        <span className="font-semibold">{job.rating || 'New'}</span>
-                                    </div>
-                                    <div className="text-xs bg-agri-gray-100 px-3 py-1 rounded-lg text-agri-gray-600 border border-agri-gray-200 font-medium">
-                                        {job.date}
-                                    </div>
+                                <div className="bg-green-50 text-green-700 px-3 py-1.5 rounded-2xl text-sm font-black shadow-sm border border-green-100">
+                                    ₹{job.wage}{t.perDay}
                                 </div>
+                            </div>
 
-                                {job.description && (
-                                    <p className="text-sm text-agri-gray-700 mb-4 bg-agri-gray-50 p-3 rounded-xl border border-agri-gray-100">
-                                        {job.description}
-                                    </p>
-                                )}
-
-                                {/* Voice Note Player */}
-                                {job.voiceNoteBlob && (
-                                    <div className="mb-4">
-                                        <AudioPlayer
-                                            audioUrl={job.voiceNoteBlob}
-                                            duration={job.voiceNoteDuration}
-                                        />
-                                    </div>
-                                )}
-
-                                {/* Group Application */}
-                                {selectedJob === job.id && (
-                                    <div className="mb-4 bg-agri-green-50 border-2 border-agri-green-200 rounded-xl p-4 animate-in slide-in-from-top duration-200">
-                                        <label className="block text-sm font-bold text-agri-green-700 mb-2 flex items-center gap-2">
-                                            <Users className="h-4 w-4" />
-                                            Applying with a group?
-                                        </label>
-                                        <div className="flex items-center gap-3">
-                                            <input
-                                                type="number"
-                                                min="1"
-                                                max="20"
-                                                value={groupSize}
-                                                onChange={(e) => setGroupSize(parseInt(e.target.value) || 1)}
-                                                className="w-20 bg-white border-2 border-agri-green-300 rounded-lg p-2 text-center font-bold text-lg outline-none focus:ring-2 focus:ring-agri-green-500"
-                                            />
-                                            <span className="text-sm text-agri-gray-700 font-medium">
-                                                {groupSize === 1 ? 'worker' : 'workers'}
-                                            </span>
-                                        </div>
-                                    </div>
-                                )}
-
-                                {/* Action Buttons */}
-                                <div className="flex gap-2">
-                                    {selectedJob === job.id ? (
-                                        <>
-                                            <button
-                                                onClick={() => handleApply(job.id)}
-                                                className="flex-1 bg-agri-green-500 hover:bg-agri-green-600 text-white font-bold py-4 rounded-xl shadow-green-lg flex items-center justify-center transition-all active:scale-95"
-                                            >
-                                                <Users className="h-5 w-5 mr-2" />
-                                                Apply with {groupSize} {groupSize === 1 ? 'Worker' : 'Workers'}
-                                            </button>
-                                            <button
-                                                onClick={() => setSelectedJob(null)}
-                                                className="px-4 bg-agri-gray-200 hover:bg-agri-gray-300 text-agri-gray-700 font-bold rounded-xl transition-all"
-                                            >
-                                                Cancel
-                                            </button>
-                                        </>
-                                    ) : (
-                                        <>
-                                            <button
-                                                onClick={() => setSelectedJob(job.id)}
-                                                className="flex-1 bg-agri-green-500 hover:bg-agri-green-600 text-white font-bold py-4 rounded-xl shadow-green-lg flex items-center justify-center transition-all active:scale-95"
-                                            >
-                                                Apply Now
-                                            </button>
-                                            <button
-                                                onClick={() => handleCallFarmer(job.farmerName)}
-                                                className="w-14 bg-agri-gray-100 hover:bg-agri-green-50 text-agri-green-600 font-bold rounded-xl flex items-center justify-center transition-colors border-2 border-agri-gray-200 hover:border-agri-green-300"
-                                                title="Call Farmer"
-                                            >
-                                                <Phone className="h-6 w-6" />
-                                            </button>
-                                            <button
-                                                onClick={() => handleOpenMap(job.lat, job.lng)}
-                                                className="w-14 bg-agri-gray-100 hover:bg-blue-50 text-blue-600 font-bold rounded-xl flex items-center justify-center transition-colors border-2 border-agri-gray-200 hover:border-blue-300"
-                                                title="View on Map"
-                                            >
-                                                <Map className="h-6 w-6" />
-                                            </button>
-                                        </>
-                                    )}
+                            <div className="flex items-center space-x-4 text-xs text-gray-500 font-bold mb-4">
+                                <div className="flex items-center">
+                                    <MapPin className="h-3.5 w-3.5 mr-1 text-agri-green" />
+                                    {job.distance} {t.km}
                                 </div>
+                                <div className="flex items-center">
+                                    <Star className="h-3.5 w-3.5 mr-1 text-yellow-400 fill-current" />
+                                    {job.rating || 'New'}
+                                </div>
+                                <div className="bg-gray-100 px-2 py-0.5 rounded-lg text-gray-600 border border-gray-200">
+                                    {job.date}
+                                </div>
+                            </div>
+
+                            <p className="text-sm text-gray-600 mb-5 line-clamp-2 leading-relaxed">{job.description}</p>
+
+                            <div className="flex space-x-2">
+                                <button
+                                    onClick={() => handleApplyJob(job)}
+                                    className="flex-1 bg-agri-dark text-white font-black py-4 rounded-2xl shadow-xl shadow-green-100 flex items-center justify-center transition-all hover:bg-agri-green active:scale-95"
+                                >
+                                    <CheckCircle2 className="h-5 w-5 mr-2" /> Book Now
+                                </button>
+                                <button
+                                    onClick={() => handleCallFarmer(job.farmerPhone)}
+                                    className="w-14 bg-amber-500 hover:bg-amber-600 text-white font-bold rounded-2xl flex items-center justify-center transition-all shadow-xl shadow-amber-100 active:scale-95"
+                                >
+                                    <Phone className="h-6 w-6" />
+                                </button>
+                                <button
+                                    onClick={() => handleOpenMap(job.lat, job.lng)}
+                                    className="w-14 bg-gray-100 hover:bg-blue-100 text-blue-600 font-bold rounded-2xl flex items-center justify-center transition-colors active:scale-95"
+                                    title="View on Map"
+                                >
+                                    <MapPin className="h-6 w-6" />
+                                </button>
                             </div>
                         </div>
                     ))

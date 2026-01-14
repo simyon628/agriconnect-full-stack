@@ -1,342 +1,288 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { Phone, Star, MapPin, Filter, Tractor, Users, Plus, X, Briefcase, ChevronRight, Edit3, Map } from 'lucide-react';
-import EnhancedJobPostModal from './EnhancedJobPostModal';
-import WeatherWidget from './WeatherWidget';
+import { Phone, Star, Filter, Tractor, Users, Plus, X, Briefcase, ShoppingBag, ChevronLeft, ChevronRight, Camera, Tag, MapPin, CalendarCheck, CheckCircle2, Trash2, RefreshCcw, UserCheck } from 'lucide-react';
 import { TRANSLATIONS } from '../constants';
 import { storageService } from '../services/storageService';
-import { Language, User, Job } from '../types';
+import { Language, User, Job, Equipment, StoreProduct } from '../types';
 
 interface DashboardProps {
-    language: Language;
-    currentUser: User;
+  language: Language;
+  currentUser: User;
 }
 
+const ImageCarousel = ({ images }: { images: string[] }) => {
+  const [index, setIndex] = useState(0);
+  if (!images || images.length === 0) return null;
+  
+  return (
+    <div className="relative w-full h-full">
+      <img src={images[index]} className="w-full h-full object-cover" />
+      {images.length > 1 && (
+        <>
+          <button 
+            onClick={(e) => { e.stopPropagation(); setIndex((index - 1 + images.length) % images.length); }}
+            className="absolute left-1 top-1/2 -translate-y-1/2 bg-black/30 text-white p-1 rounded-full backdrop-blur-sm"
+          >
+            <ChevronLeft className="w-3 h-3" />
+          </button>
+          <button 
+            onClick={(e) => { e.stopPropagation(); setIndex((index + 1) % images.length); }}
+            className="absolute right-1 top-1/2 -translate-y-1/2 bg-black/30 text-white p-1 rounded-full backdrop-blur-sm"
+          >
+            <ChevronRight className="w-3 h-3" />
+          </button>
+        </>
+      )}
+    </div>
+  );
+};
+
 const FarmerDashboard: React.FC<DashboardProps> = ({ language, currentUser }) => {
-    const t = TRANSLATIONS[language];
-    const [activeTab, setActiveTab] = useState<'workers' | 'equipment' | 'my_jobs'>('workers');
-    const [sortBy, setSortBy] = useState<'nearest' | 'rating'>('nearest');
-    const [radius, setRadius] = useState<number>(50); // Increased default radius
-    const [isPostingJob, setIsPostingJob] = useState(false);
-    const [jobForm, setJobForm] = useState({ workType: '', wage: '', description: '' });
+  const t = TRANSLATIONS[language]; 
+  const [activeTab, setActiveTab] = useState<'workers' | 'equipment' | 'stores' | 'my_jobs'>('workers');
+  const [sortBy, setSortBy] = useState<'nearest' | 'rating'>('nearest');
+  const [radius, setRadius] = useState<number>(50);
+  const [isPostingJob, setIsPostingJob] = useState(false);
+  const [jobForm, setJobForm] = useState({ workType: '', wage: '', description: '' });
 
-    // Real Data State
-    const [realWorkers, setRealWorkers] = useState<any[]>([]);
-    const [realEquipment, setRealEquipment] = useState<any[]>([]);
-    const [myJobs, setMyJobs] = useState<Job[]>([]);
-    const [loadingData, setLoadingData] = useState(false);
+  const [realWorkers, setRealWorkers] = useState<any[]>([]);
+  const [realEquipment, setRealEquipment] = useState<Equipment[]>([]);
+  const [realStores, setRealStores] = useState<any[]>([]);
+  const [myJobs, setMyJobs] = useState<Job[]>([]);
+  const [loadingData, setLoadingData] = useState(false);
 
-    // Load Data on Mount or when radius changes
-    useEffect(() => {
-        let isMounted = true;
-
-        const fetchData = async (isInitial = false) => {
-            if (isInitial) setLoadingData(true);
-
-            try {
-                // Fetch Real Workers
-                const workers = await storageService.getWorkers(currentUser.lat, currentUser.lng, radius);
-                if (isMounted) setRealWorkers(workers);
-
-                // Fetch Real Equipment
-                const equipment = await storageService.getEquipment(currentUser.lat, currentUser.lng, radius);
-                if (isMounted) setRealEquipment(equipment);
-
-                // Fetch My Jobs
-                const jobs = await storageService.getMyJobs(currentUser.id);
-                if (isMounted) setMyJobs(jobs);
-            } catch (e) {
-                console.error("Error fetching dashboard data", e);
-            } finally {
-                if (isInitial && isMounted) setLoadingData(false);
-            }
-        };
-
-        // Initial Fetch
-        fetchData(true);
-
-        // Poll every 3 seconds for faster updates in demo
-        const intervalId = setInterval(() => {
-            fetchData(false);
-        }, 3000);
-
-        return () => {
-            isMounted = false;
-            clearInterval(intervalId);
-        };
-    }, [currentUser, radius]);
-
-    const handleCall = (name: string) => {
-        alert(`Calling ${name}...`);
+  const fetchData = async (isInitial = false) => {
+    if (isInitial) setLoadingData(true);
+    try {
+      const workers = await storageService.getWorkers(currentUser.lat, currentUser.lng, radius);
+      setRealWorkers(workers);
+      const equipment = await storageService.getEquipment(currentUser.lat, currentUser.lng, radius);
+      setRealEquipment(equipment);
+      const stores = await storageService.getStores(currentUser.lat, currentUser.lng, radius);
+      setRealStores(stores);
+      const jobs = await storageService.getMyJobs(currentUser.id);
+      setMyJobs(jobs);
+    } catch (e) {
+      console.error("Error fetching dashboard data", e);
+    } finally {
+      if (isInitial) setLoadingData(false);
     }
+  };
 
-    const handleOpenMap = (lat: number, lng: number) => {
-        window.open(`https://www.google.com/maps/search/?api=1&query=${lat},${lng}`, '_blank');
-    };
+  useEffect(() => {
+    fetchData(true);
+    const intervalId = setInterval(() => fetchData(false), 5000);
+    return () => clearInterval(intervalId);
+  }, [currentUser, radius]); 
 
-    const handlePostJob = async (jobData: Partial<Job>, audioBlob?: Blob, audioDuration?: number) => {
-        // Convert audio blob to base64 for demo (in production, upload to Firebase Storage)
-        let voiceNoteBlob = '';
-        if (audioBlob) {
-            const reader = new FileReader();
-            voiceNoteBlob = await new Promise<string>((resolve) => {
-                reader.onloadend = () => resolve(reader.result as string);
-                reader.readAsDataURL(audioBlob);
-            });
-        }
+  const handlePostJob = async (e: React.FormEvent) => {
+      e.preventDefault();
+      if (!jobForm.workType || !jobForm.wage) return;
+      const jobPayload: Job = {
+          id: '',
+          farmerId: currentUser.id,
+          farmerName: currentUser.name,
+          farmerPhone: currentUser.phone,
+          workType: jobForm.workType,
+          wage: parseInt(jobForm.wage),
+          description: jobForm.description,
+          date: new Date().toLocaleDateString(),
+          location: currentUser.location,
+          distance: 0,
+          lat: currentUser.lat,
+          lng: currentUser.lng,
+          rating: 0,
+          status: 'OPEN'
+      };
+      
+      const savedJob = await storageService.postJob(jobPayload);
+      
+      // Instant feedback for My Jobs
+      setMyJobs(prev => [savedJob, ...prev]);
+      
+      setIsPostingJob(false);
+      setJobForm({ workType: '', wage: '', description: '' });
+      setActiveTab('my_jobs');
+      fetchData(false);
+  };
 
-        const newJob: Job = {
-            id: '', // Backend handles ID
-            farmerId: currentUser.id,
-            farmerName: currentUser.name,
-            workType: jobData.workType!,
-            wage: jobData.wage!,
-            description: jobData.description,
-            date: new Date().toLocaleDateString(),
-            location: currentUser.location,
-            distance: 0,
-            lat: currentUser.lat,
-            lng: currentUser.lng,
-            rating: 0,
-            status: 'OPEN',
-            voiceNoteBlob: voiceNoteBlob || undefined,
-            voiceNoteDuration: audioDuration
-        };
+  const handleUpdateJobStatus = async (jobId: string, newStatus: Job['status']) => {
+    // Instant local update
+    setMyJobs(prev => prev.map(j => j.id === jobId ? { ...j, status: newStatus } : j));
+    await storageService.updateJobStatus(jobId, newStatus);
+  };
 
-        await storageService.postJob(newJob);
-        setIsPostingJob(false);
-        setActiveTab('my_jobs'); // Switch to My Jobs tab
+  const handleDeleteJob = async (jobId: string) => {
+    if (confirm("Are you sure you want to delete this job posting?")) {
+      setMyJobs(prev => prev.filter(j => j.id !== jobId));
+      await storageService.deleteJob(jobId);
+    }
+  };
 
-        // Immediate refresh
-        const jobs = await storageService.getMyJobs(currentUser.id);
-        setMyJobs(jobs);
-        alert("✅ Job Posted Successfully!");
-    };
+  const handleBookEquipment = async (item: Equipment) => {
+      if (!item.available) return;
+      if (confirm(`Do you want to book ${item.name}?`)) {
+          // Instant local update
+          setRealEquipment(prev => prev.map(e => e.id === item.id ? {...e, available: false} : e));
+          
+          await storageService.updateEquipment(item.id, { available: false });
+          alert("Booking successful!");
+          fetchData(false);
+      }
+  };
 
-    const handleJobStatusUpdate = async (jobId: string, status: string) => {
-        await storageService.updateJobStatus(jobId, status);
-        const jobs = await storageService.getMyJobs(currentUser.id);
-        setMyJobs(jobs);
-    };
+  const displayedList = useMemo(() => {
+      if (activeTab === 'my_jobs') return myJobs;
+      let list = activeTab === 'workers' ? realWorkers : activeTab === 'equipment' ? realEquipment : realStores;
+      return [...list].sort((a, b) => {
+        if (sortBy === 'nearest') return (a.distance || 0) - (b.distance || 0);
+        if (sortBy === 'rating') return (b.rating || 0) - (a.rating || 0);
+        return 0;
+      });
+  }, [activeTab, realWorkers, realEquipment, realStores, myJobs, sortBy]);
 
-    // Sort Logic (Filtering is done by API now, but we sort locally for UX)
-    const displayedList = useMemo(() => {
-        let list = activeTab === 'workers' ? realWorkers : realEquipment;
-        return [...list].sort((a, b) => {
-            if (sortBy === 'nearest') return a.distance - b.distance;
-            if (sortBy === 'rating') return b.rating - a.rating;
-            return 0;
-        });
-    }, [activeTab, realWorkers, realEquipment, sortBy]);
+  return (
+    <div className="pb-24">
+      <div className="bg-white/90 backdrop-blur-sm p-2 sticky top-16 z-40 shadow-sm flex space-x-1 border-b border-gray-100 overflow-x-auto no-scrollbar">
+        <button onClick={() => setActiveTab('workers')} className={`flex-1 py-3 px-2 rounded-xl font-bold text-xs flex items-center justify-center whitespace-nowrap transition-all duration-200 ${activeTab === 'workers' ? 'bg-agri-dark text-white shadow-md' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'}`}>
+            <Users className="h-4 w-4 mr-1.5" /> {t.workers}
+        </button>
+        <button onClick={() => setActiveTab('equipment')} className={`flex-1 py-3 px-2 rounded-xl font-bold text-xs flex items-center justify-center whitespace-nowrap transition-all duration-200 ${activeTab === 'equipment' ? 'bg-blue-600 text-white shadow-md' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'}`}>
+            <Tractor className="h-4 w-4 mr-1.5" /> {t.equipment}
+        </button>
+        <button onClick={() => setActiveTab('stores')} className={`flex-1 py-3 px-2 rounded-xl font-bold text-xs flex items-center justify-center whitespace-nowrap transition-all duration-200 ${activeTab === 'stores' ? 'bg-purple-600 text-white shadow-md' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'}`}>
+            <ShoppingBag className="h-4 w-4 mr-1.5" /> {t.stores}
+        </button>
+        <button onClick={() => setActiveTab('my_jobs')} className={`flex-1 py-3 px-2 rounded-xl font-bold text-xs flex items-center justify-center whitespace-nowrap transition-all duration-200 ${activeTab === 'my_jobs' ? 'bg-agri-accent text-white shadow-md' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'}`}>
+            <Briefcase className="h-4 w-4 mr-1.5" /> {t.myJobs}
+        </button>
+      </div>
 
-    return (
-        <div className="pb-24">
-            {/* Category Tabs */}
-            <div className="bg-white/90 backdrop-blur-sm p-2 sticky top-16 z-40 shadow-sm flex space-x-1 border-b border-gray-100 overflow-x-auto no-scrollbar">
-                <button
-                    onClick={() => setActiveTab('workers')}
-                    className={`flex-1 py-3 px-2 rounded-xl font-bold text-xs flex items-center justify-center whitespace-nowrap transition-all duration-200 ${activeTab === 'workers' ? 'bg-agri-dark text-white shadow-md' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'}`}
+      <div className="px-4 py-4">
+        <button onClick={() => setIsPostingJob(true)} className="w-full bg-agri-green text-white py-4 rounded-2xl font-extrabold shadow-lg shadow-green-100 hover:bg-agri-dark transition-all flex justify-center items-center active:scale-95">
+            <Plus className="h-6 w-6 mr-2" /> {t.postJob}
+        </button>
+      </div>
+
+      <div className="px-4 space-y-4">
+          {displayedList.length === 0 ? (
+             <div className="text-center py-20 text-gray-400 font-bold uppercase tracking-widest text-xs">
+                {t.noResults}
+             </div>
+          ) : (
+            displayedList.map((item: any) => (
+                <div 
+                  key={item.id} 
+                  className={`bg-white/90 backdrop-blur-sm p-5 rounded-2xl shadow-sm border border-white/50 flex flex-col transition-all ${(!item.available && activeTab === 'equipment') || (item.status === 'FILLED' && activeTab === 'my_jobs') ? 'opacity-70' : ''}`}
                 >
-                    <Users className="h-4 w-4 mr-1.5" /> {t.workers}
-                </button>
-                <button
-                    onClick={() => setActiveTab('equipment')}
-                    className={`flex-1 py-3 px-2 rounded-xl font-bold text-xs flex items-center justify-center whitespace-nowrap transition-all duration-200 ${activeTab === 'equipment' ? 'bg-blue-600 text-white shadow-md' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'}`}
-                >
-                    <Tractor className="h-4 w-4 mr-1.5" /> {t.equipment}
-                </button>
-                <button
-                    onClick={() => setActiveTab('my_jobs')}
-                    className={`flex-1 py-3 px-2 rounded-xl font-bold text-xs flex items-center justify-center whitespace-nowrap transition-all duration-200 ${activeTab === 'my_jobs' ? 'bg-agri-accent text-white shadow-md' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'}`}
-                >
-                    <Briefcase className="h-4 w-4 mr-1.5" /> {t.myJobs}
-                </button>
-            </div>
-
-            {/* Weather Widget & Action Bar */}
-            <div className="px-4 py-3 space-y-3">
-                {/* Weather Widget */}
-                <WeatherWidget lat={currentUser.lat} lng={currentUser.lng} />
-
-                {/* Post Job Button */}
-                <button
-                    onClick={() => setIsPostingJob(true)}
-                    className="w-full bg-agri-green-500 text-white py-4 rounded-xl font-bold shadow-green-lg hover:bg-agri-green-600 transition-all flex justify-center items-center active:scale-95"
-                >
-                    <Plus className="h-5 w-5 mr-2" /> {t.postJob}
-                </button>
-            </div>
-
-            {/* MAIN CONTENT AREA */}
-            {activeTab === 'my_jobs' ? (
-                <div className="px-4 space-y-4">
-                    <h3 className="font-bold text-gray-700 mt-2">{t.manageJobs}</h3>
-                    {myJobs.length === 0 ? (
-                        <div className="text-center py-10 bg-white/50 rounded-2xl border border-dashed border-gray-300">
-                            <p className="text-gray-500">{t.noJobs}</p>
+                    <div className="flex items-center space-x-4">
+                        <div className="w-20 h-20 rounded-2xl bg-gray-100 overflow-hidden border flex-shrink-0">
+                          {item.images && item.images.length > 0 ? <ImageCarousel images={item.images} /> : (item.shopImages ? <ImageCarousel images={item.shopImages}/> : <img src={item.image || `https://ui-avatars.com/api/?name=${encodeURIComponent(item.name || item.workType)}&background=random`} className="w-full h-full object-cover"/>)}
                         </div>
-                    ) : (
-                        myJobs.map(job => (
-                            <div key={job.id} className="bg-white p-4 rounded-xl shadow-sm border border-gray-200">
-                                <div className="flex justify-between items-start">
-                                    <div>
-                                        <h4 className="font-bold text-lg">{job.workType}</h4>
-                                        <p className="text-sm text-gray-500">₹{job.wage}{t.perDay} • {job.date}</p>
-                                    </div>
-                                    <span className={`px-2 py-1 rounded text-xs font-bold ${job.status === 'OPEN' ? 'bg-green-100 text-green-700' :
-                                            job.status === 'FILLED' ? 'bg-blue-100 text-blue-700' :
-                                                job.status === 'COMPLETED' ? 'bg-gray-100 text-gray-700' : 'bg-red-100 text-red-700'
-                                        }`}>
-                                        {job.status}
+                        <div className="flex-1 min-w-0">
+                            <h3 className="font-extrabold text-gray-900 truncate text-lg">{item.name || item.workType}</h3>
+                            <p className="text-gray-500 text-sm">
+                              <span className="text-agri-green font-bold">{item.distance || 0} {t.km}</span>
+                            </p>
+                            
+                            {(activeTab === 'equipment' || activeTab === 'my_jobs') && (
+                                <div className="flex items-center justify-between mt-1">
+                                    <p className={`font-extrabold ${activeTab === 'equipment' ? 'text-blue-600' : 'text-amber-600'}`}>
+                                        ₹{item.rentPerDay || item.wage}{t.perDay}
+                                    </p>
+                                    <span className={`text-[10px] px-2 py-1 rounded font-black uppercase ${
+                                        (activeTab === 'equipment' && item.available) || (activeTab === 'my_jobs' && item.status === 'OPEN') 
+                                        ? 'bg-green-100 text-green-700' 
+                                        : item.status === 'FILLED' ? 'bg-amber-100 text-amber-700' : 'bg-red-100 text-red-600'
+                                    }`}>
+                                        {activeTab === 'equipment' 
+                                          ? (item.available ? 'Ready' : 'Rented') 
+                                          : (item.status === 'OPEN' ? 'Open' : item.status === 'FILLED' ? 'Filled' : item.status === 'COMPLETED' ? 'Completed' : 'Cancelled')}
                                     </span>
                                 </div>
-                                <div className="mt-4 flex space-x-2 overflow-x-auto">
-                                    {['OPEN', 'FILLED', 'COMPLETED', 'CANCELLED'].map(s => (
-                                        <button
-                                            key={s}
-                                            onClick={() => handleJobStatusUpdate(job.id, s)}
-                                            disabled={job.status === s}
-                                            className={`px-3 py-1.5 rounded-lg text-xs font-bold border transition-colors ${job.status === s ? 'bg-gray-800 text-white border-gray-800' : 'bg-white border-gray-200 text-gray-600 hover:bg-gray-50'
-                                                }`}
-                                        >
-                                            {s}
-                                        </button>
-                                    ))}
-                                </div>
-                            </div>
-                        ))
+                            )}
+                        </div>
+                        <div className="flex flex-col space-y-2">
+                            {item.phone && activeTab !== 'my_jobs' && <button onClick={() => window.location.href = `tel:${item.phone}`} className="p-3 bg-agri-green text-white rounded-full shadow-lg shadow-green-100 active:scale-90 transition-transform"><Phone className="h-4 w-4"/></button>}
+                            {activeTab === 'equipment' && item.available && (
+                                <button onClick={() => handleBookEquipment(item)} className="p-3 bg-blue-600 text-white rounded-full shadow-lg shadow-blue-100 active:scale-90 transition-transform"><CalendarCheck className="h-4 w-4"/></button>
+                            )}
+                        </div>
+                    </div>
+
+                    {/* My Jobs Management Actions */}
+                    {activeTab === 'my_jobs' && (
+                        <div className="mt-4 pt-3 border-t border-gray-100 grid grid-cols-2 sm:grid-cols-4 gap-2">
+                            {item.status === 'OPEN' && (
+                                <button 
+                                    onClick={() => handleUpdateJobStatus(item.id, 'FILLED')}
+                                    className="flex items-center justify-center space-x-1 px-3 py-2 bg-amber-50 text-amber-600 rounded-xl text-[10px] font-black uppercase tracking-wider hover:bg-amber-100 transition-colors"
+                                >
+                                    <UserCheck className="h-3.5 w-3.5" />
+                                    <span>Mark Filled</span>
+                                </button>
+                            )}
+                            {(item.status === 'FILLED' || item.status === 'OPEN') && (
+                                <button 
+                                    onClick={() => handleUpdateJobStatus(item.id, 'COMPLETED')}
+                                    className="flex items-center justify-center space-x-1 px-3 py-2 bg-green-50 text-green-600 rounded-xl text-[10px] font-black uppercase tracking-wider hover:bg-green-100 transition-colors"
+                                >
+                                    <CheckCircle2 className="h-3.5 w-3.5" />
+                                    <span>Complete</span>
+                                </button>
+                            )}
+                            {(item.status === 'FILLED' || item.status === 'COMPLETED' || item.status === 'CANCELLED') && (
+                                <button 
+                                    onClick={() => handleUpdateJobStatus(item.id, 'OPEN')}
+                                    className="flex items-center justify-center space-x-1 px-3 py-2 bg-blue-50 text-blue-600 rounded-xl text-[10px] font-black uppercase tracking-wider hover:bg-blue-100 transition-colors"
+                                >
+                                    <RefreshCcw className="h-3.5 w-3.5" />
+                                    <span>Re-open</span>
+                                </button>
+                            )}
+                            <button 
+                                onClick={() => handleDeleteJob(item.id)}
+                                className="flex items-center justify-center space-x-1 px-3 py-2 bg-red-50 text-red-500 rounded-xl text-[10px] font-black uppercase tracking-wider hover:bg-red-100 transition-colors"
+                            >
+                                <Trash2 className="h-3.5 w-3.5" />
+                                <span>Delete</span>
+                            </button>
+                        </div>
                     )}
                 </div>
-            ) : (
-                <>
-                    {/* Sort & Filter Section (Only for Discovery tabs) */}
-                    <div className="bg-white/80 backdrop-blur-sm px-4 py-4 mb-2 shadow-sm">
-                        <div className="flex justify-between items-center mb-3">
-                            <h2 className="font-bold text-gray-800 text-lg">{t.nearbyUsers}</h2>
-                            <div className="flex items-center space-x-1">
-                                <span className="text-xs font-bold text-gray-400 uppercase">{t.sort}:</span>
-                            </div>
-                        </div>
+            ))
+          )}
+      </div>
 
-                        {/* Radio Sort */}
-                        <div className="flex space-x-4 mb-4">
-                            <label className="flex items-center space-x-2 cursor-pointer bg-white px-3 py-1.5 rounded-lg border border-gray-200 shadow-sm">
-                                <div className={`w-4 h-4 rounded-full border flex items-center justify-center ${sortBy === 'nearest' ? 'border-agri-green' : 'border-gray-300'}`}>
-                                    {sortBy === 'nearest' && <div className="w-2 h-2 bg-agri-green rounded-full"></div>}
-                                </div>
-                                <input type="radio" name="sort" className="hidden" checked={sortBy === 'nearest'} onChange={() => setSortBy('nearest')} />
-                                <span className={`text-sm font-medium ${sortBy === 'nearest' ? 'text-gray-900' : 'text-gray-500'}`}>{t.nearest}</span>
-                            </label>
-
-                            <label className="flex items-center space-x-2 cursor-pointer bg-white px-3 py-1.5 rounded-lg border border-gray-200 shadow-sm">
-                                <div className={`w-4 h-4 rounded-full border flex items-center justify-center ${sortBy === 'rating' ? 'border-agri-green' : 'border-gray-300'}`}>
-                                    {sortBy === 'rating' && <div className="w-2 h-2 bg-agri-green rounded-full"></div>}
-                                </div>
-                                <input type="radio" name="sort" className="hidden" checked={sortBy === 'rating'} onChange={() => setSortBy('rating')} />
-                                <span className={`text-sm font-medium ${sortBy === 'rating' ? 'text-gray-900' : 'text-gray-500'}`}>{t.rating}</span>
-                            </label>
-                        </div>
-
-                        {/* Radius Filter Pills */}
-                        <div className="flex space-x-2 overflow-x-auto no-scrollbar pb-1">
-                            {[5, 10, 25, 50, 100].map(r => (
-                                <button
-                                    key={r}
-                                    onClick={() => setRadius(r)}
-                                    className={`px-4 py-1.5 rounded-full text-xs font-bold whitespace-nowrap border transition-all ${radius === r ? 'bg-agri-green text-white border-agri-green shadow-md' : 'bg-white border-gray-200 text-gray-500 hover:bg-gray-50'}`}
-                                >
-                                    &lt; {r} {t.km}
-                                </button>
-                            ))}
-                        </div>
-                    </div>
-
-                    {/* Scrollable List */}
-                    <div className="px-4 space-y-4 mt-4">
-                        {loadingData ? (
-                            <div className="text-center py-10">...</div>
-                        ) : displayedList.length === 0 ? (
-                            <div className="text-center py-10 bg-white/50 backdrop-blur-sm rounded-2xl mx-4 border border-white/50">
-                                <div className="bg-white h-20 w-20 rounded-full flex items-center justify-center mx-auto mb-4 shadow-sm">
-                                    <Filter className="h-8 w-8 text-gray-300" />
-                                </div>
-                                <p className="text-gray-500 font-medium">{t.noResults}</p>
-                            </div>
-                        ) : (
-                            displayedList.map((item: any) => (
-                                <div key={item.id} className="bg-white/90 backdrop-blur-sm p-4 rounded-2xl shadow-sm border border-white/50 flex items-start space-x-4 active:scale-[0.98] transition-transform">
-                                    {/* Image / Avatar */}
-                                    <div className="relative flex-shrink-0">
-                                        <img
-                                            src={item.image || "https://via.placeholder.com/100"}
-                                            alt={item.name}
-                                            className={`object-cover shadow-sm bg-gray-100 ${activeTab === 'workers' ? 'w-16 h-16 rounded-full' : 'w-24 h-24 rounded-xl'}`}
-                                        />
-                                        <div className="absolute -bottom-1 -right-1 bg-white px-1.5 py-0.5 rounded-lg shadow border border-gray-100 flex items-center">
-                                            <Star className="h-3 w-3 text-yellow-400 fill-current mr-0.5" />
-                                            <span className="text-xs font-bold text-gray-800">{item.rating}</span>
-                                        </div>
-                                    </div>
-
-                                    {/* Content */}
-                                    <div className="flex-1 min-w-0">
-                                        <div className="flex justify-between items-start">
-                                            <div>
-                                                <h3 className="font-bold text-gray-900 truncate pr-2 text-lg">{item.name}</h3>
-                                                <p className="text-gray-500 text-sm truncate flex items-center">
-                                                    {activeTab === 'workers' ? item.skills[0] : item.type}
-                                                    <span className="mx-1">•</span>
-                                                    <span className="text-agri-green font-medium">{item.distance} {t.km}</span>
-                                                </p>
-                                            </div>
-                                        </div>
-
-                                        {activeTab === 'workers' ? (
-                                            <div className="mt-3 flex items-center space-x-2">
-                                                <span className={`text-xs px-2 py-1 rounded font-bold ${item.available ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
-                                                    {item.available ? t.available.toUpperCase() : t.busy.toUpperCase()}
-                                                </span>
-                                            </div>
-                                        ) : (
-                                            <div className="mt-2">
-                                                <span className="text-lg font-bold text-gray-900">₹{item.rentPerDay}<span className="text-xs text-gray-400 font-normal">{t.perDay}</span></span>
-                                            </div>
-                                        )}
-                                    </div>
-
-                                    <div className="flex flex-col justify-between h-full space-y-2">
-                                        <button
-                                            onClick={() => handleCall(item.name)}
-                                            className="h-10 w-10 rounded-full bg-agri-green hover:bg-agri-dark text-white flex items-center justify-center shadow-lg shadow-green-200 transition-colors"
-                                            title={t.call}
-                                        >
-                                            <Phone className="h-5 w-5" />
-                                        </button>
-                                        <button
-                                            onClick={() => handleOpenMap(item.lat, item.lng)}
-                                            className="h-8 w-8 rounded-full bg-gray-100 hover:bg-blue-100 text-blue-600 flex items-center justify-center transition-colors"
-                                            title={t.viewOnMap}
-                                        >
-                                            <Map className="h-4 w-4" />
-                                        </button>
-                                    </div>
-                                </div>
-                            ))
-                        )}
-                    </div>
-                </>
-            )}
-
-            {/* Enhanced Post Job Modal */}
-            <EnhancedJobPostModal
-                isOpen={isPostingJob}
-                onClose={() => setIsPostingJob(false)}
-                onSubmit={handlePostJob}
-                currentUser={currentUser}
-                language={language}
-            />
-        </div>
-    );
+      {isPostingJob && (
+          <div className="fixed inset-0 z-[60] flex items-end sm:items-center justify-center bg-black/60 backdrop-blur-md">
+             <div className="bg-white rounded-t-3xl sm:rounded-3xl w-full max-w-md p-8 shadow-2xl animate-in slide-in-from-bottom duration-300">
+                 <div className="flex justify-between items-center mb-6">
+                     <h3 className="text-2xl font-extrabold text-gray-900">{t.postJob}</h3>
+                     <button onClick={() => setIsPostingJob(false)} className="p-2 bg-gray-100 rounded-full hover:bg-gray-200 transition-colors"><X className="h-6 w-6 text-gray-500"/></button>
+                 </div>
+                 <form onSubmit={handlePostJob} className="space-y-5">
+                     <div>
+                        <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1.5 ml-1">{t.workType}</label>
+                        <input required className="w-full bg-gray-50 border border-gray-200 rounded-2xl p-4 font-bold focus:ring-2 focus:ring-agri-green outline-none" placeholder="e.g. Rice Harvesting" value={jobForm.workType} onChange={e => setJobForm({...jobForm, workType: e.target.value})} />
+                     </div>
+                     <div>
+                        <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1.5 ml-1">{t.dailyWage} (₹)</label>
+                        <input required type="number" className="w-full bg-gray-50 border border-gray-200 rounded-2xl p-4 font-bold focus:ring-2 focus:ring-agri-green outline-none" placeholder="0.00" value={jobForm.wage} onChange={e => setJobForm({...jobForm, wage: e.target.value})} />
+                     </div>
+                     <div>
+                        <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1.5 ml-1">{t.description}</label>
+                        <textarea className="w-full bg-gray-50 border border-gray-200 rounded-2xl p-4 font-medium focus:ring-2 focus:ring-agri-green outline-none" placeholder="More details about the work..." value={jobForm.description} onChange={e => setJobForm({...jobForm, description: e.target.value})} />
+                     </div>
+                     <button type="submit" className="w-full bg-agri-green text-white py-5 rounded-2xl font-extrabold text-lg shadow-xl shadow-green-100 hover:bg-agri-dark transition-all transform active:scale-95">
+                        {t.postJob}
+                     </button>
+                 </form>
+             </div>
+          </div>
+      )}
+    </div>
+  );
 };
 
 export default FarmerDashboard;
