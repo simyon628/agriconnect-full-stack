@@ -1,8 +1,8 @@
-
 export enum UserRole {
   FARMER = 'FARMER',
   WORKER = 'WORKER',
   PROVIDER = 'PROVIDER',
+  STORE = 'STORE',
   NONE = 'NONE'
 }
 
@@ -21,6 +21,15 @@ export interface User {
   location: string;
   lat: number;
   lng: number;
+  shopImages?: string[];
+}
+
+export interface StoreProduct {
+  id: string;
+  name: string;
+  category: 'Seeds' | 'Fertilizer' | 'Pesticide' | 'Tools';
+  price?: string;
+  images?: string[];
 }
 
 export interface Job {

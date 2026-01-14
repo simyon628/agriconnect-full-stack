@@ -4,7 +4,7 @@ import { UserRole, Language, User } from '../types';
 import { TRANSLATIONS } from '../constants';
 import { storageService } from '../services/storageService';
 import { otpService } from '../services/otpService';
-import { Sprout, HardHat, Tractor, MapPin, Loader2, ArrowRight, X, ChevronRight, Check } from 'lucide-react';
+import { Sprout, HardHat, Tractor, MapPin, Loader2, ArrowRight, X, ChevronRight, Check, ShoppingBag } from 'lucide-react';
 
 interface RoleSelectionProps {
   language: Language;
@@ -276,6 +276,13 @@ const RoleSelection: React.FC<RoleSelectionProps> = ({ language, onSelectRole })
           title={t.provider}
           desc={t.providerDesc}
           color="bg-agri-green-700"
+        />
+        <RoleCard
+          role={UserRole.STORE}
+          icon={ShoppingBag}
+          title={t.store}
+          desc={t.storeDesc}
+          color="bg-purple-600"
         />
       </div>
 

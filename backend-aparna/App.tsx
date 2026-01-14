@@ -7,6 +7,8 @@ import FarmerDashboard from './components/FarmerDashboard';
 import WorkerDashboard from './components/WorkerDashboard';
 import ProviderDashboard from './components/ProviderDashboard';
 
+import StoreDashboard from './components/StoreDashboard';
+
 const App: React.FC = () => {
   // Initialize currentUser from localStorage
   const [currentUser, setCurrentUser] = useState<User | null>(() => {
@@ -65,6 +67,8 @@ const App: React.FC = () => {
         return <WorkerDashboard language={language} currentUser={currentUser} onUpdateAvailability={handleUserUpdate} />;
       case UserRole.PROVIDER:
         return <ProviderDashboard language={language} currentUser={currentUser} />;
+      case UserRole.STORE:
+        return <StoreDashboard language={language} currentUser={currentUser} onUserUpdate={handleUserUpdate} />;
       default:
         return <RoleSelection language={language} onSelectRole={handleUserLogin} />;
     }

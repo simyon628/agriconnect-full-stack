@@ -1,4 +1,4 @@
-import { User, Job, Equipment, WorkerProfile, Notification, UserRole } from '../types';
+import { User, Job, Equipment, WorkerProfile, Notification, UserRole, StoreProduct } from '../types';
 import { calculateDistance } from '../constants';
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
@@ -136,6 +136,78 @@ export const storageService = {
     } catch (error) {
       console.error('Error fetching my jobs:', error);
       return [];
+    }
+  },
+
+  // STORE OPERATIONS
+  getUserById: async (id: string): Promise<User | null> => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/users/${id}`);
+      if (!response.ok) return null;
+      return await response.json();
+    } catch (error) {
+      console.error('Error fetching user by id:', error);
+      return null;
+    }
+  },
+
+  getStoreProducts: async (storeId: string): Promise<StoreProduct[]> => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/users/${storeId}`);
+      if (!response.ok) return [];
+      const user = await response.json();
+      return user.products || [];
+    } catch (error) {
+      console.error('Error fetching store products:', error);
+      return [];
+    }
+  },
+
+  addStoreProduct: async (storeId: string, product: StoreProduct): Promise<StoreProduct[]> => {
+    try {
+      // 1. Get current user to get current products
+      const response = await fetch(`${API_BASE_URL}/users/${storeId}`);
+      if (!response.ok) throw new Error('User not found');
+      const user = await response.json();
+
+      const currentProducts = user.products || [];
+      const updatedProducts = [...currentProducts, product];
+
+      // 2. Update user with new products list
+      const updateResponse = await fetch(`${API_BASE_URL}/users/${storeId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ products: updatedProducts })
+      });
+
+      if (!updateResponse.ok) throw new Error('Failed to update store products');
+      return updatedProducts;
+    } catch (error) {
+      console.error('Error adding store product:', error);
+      throw error;
+    }
+  },
+
+  deleteStoreProduct: async (storeId: string, productId: string): Promise<StoreProduct[]> => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/users/${storeId}`);
+      if (!response.ok) throw new Error('User not found');
+      const user = await response.json();
+
+      const currentProducts = user.products || [];
+      const updatedProducts = currentProducts.filter((p: StoreProduct) => p.id !== productId);
+
+      const updateResponse = await fetch(`${API_BASE_URL}/users/${storeId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ products: updatedProducts })
+      });
+
+      if (!updateResponse.ok) throw new Error('Failed to delete store product');
+      return updatedProducts;
+    } catch (error) {
+      console.error('Error deleting store product:', error);
+      throw error;
     }
   },
 
