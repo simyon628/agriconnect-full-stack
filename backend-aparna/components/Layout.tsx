@@ -1,9 +1,10 @@
 
-import React, { useEffect, useState } from 'react';
-import { LogOut, MapPin, ChevronDown, Bell, User as UserIcon, X, Edit2 } from 'lucide-react';
+import React, { useEffect, useState, useCallback } from 'react';
+import { LogOut, MapPin, ChevronDown, Bell, User as UserIcon, X, Edit2, Loader2 } from 'lucide-center';
 import { UserRole, Language, Notification, User } from '../types';
 import { TRANSLATIONS } from '../constants';
 import { storageService } from '../services/storageService';
+import { LogOut as LogOutIcon, MapPin as MapPinIcon, ChevronDown as ChevronDownIcon, Bell as BellIcon, User as UserIconComp, X as XIcon, Edit2 as EditIcon, Loader2 as LoaderIcon } from 'lucide-react';
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -11,253 +12,232 @@ interface LayoutProps {
   language: Language;
   onLanguageChange: (lang: Language) => void;
   onLogout: () => void;
-  currentUser?: User | null; // Pass current user for notifications
+  currentUser?: User | null;
   onUserUpdate?: (user: User) => void;
 }
 
 const Layout: React.FC<LayoutProps> = ({ children, role, language, onLanguageChange, onLogout, currentUser, onUserUpdate }) => {
   const t = TRANSLATIONS[language];
-  const [locationName, setLocationName] = useState<string>(t.detecting);
+  const [locationName, setLocationName] = useState<string>(() => localStorage.getItem('agri_location_name') || t.detecting);
   const [isLocating, setIsLocating] = useState(false);
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [showNotif, setShowNotif] = useState(false);
   const [showProfile, setShowProfile] = useState(false);
-
-  // Edit Profile State
+  
   const [editForm, setEditForm] = useState({ name: '', location: '' });
 
-  useEffect(() => {
-    // We always attempt to detect on first load if we don't have a reliable location name
-    const savedLoc = localStorage.getItem('agri_location_name');
-    if (savedLoc) {
-      setLocationName(savedLoc);
+  const detectLocation = useCallback(async (force = false) => {
+    if (isLocating) return;
+    
+    const cached = localStorage.getItem('agri_location_name');
+    if (cached && !force && locationName !== t.detecting) {
+        return;
     }
 
-    // Even if location is saved, we re-detect to ensure the location name is fresh
-    detectLocation();
-  }, []);
-
-  // Poll for notifications
-  useEffect(() => {
-    if (currentUser?.id) {
-      const fetchNotifs = async () => {
-        const data = await storageService.getNotifications(currentUser.id);
-        setNotifications(data);
-      };
-      fetchNotifs();
-      const interval = setInterval(fetchNotifs, 10000); // Poll every 10s
-      return () => clearInterval(interval);
-    }
-  }, [currentUser]);
-
-  // Init Edit Form
-  useEffect(() => {
-    if (currentUser) {
-      setEditForm({ name: currentUser.name, location: currentUser.location });
-    }
-  }, [currentUser]);
-
-  const detectLocation = () => {
     setIsLocating(true);
-    if ('geolocation' in navigator) {
-      navigator.geolocation.getCurrentPosition(
-        async (position) => {
-          const { latitude, longitude } = position.coords;
-          try {
-            const response = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}`);
+    setLocationName(t.detecting);
+
+    if (!navigator.geolocation) {
+        setLocationName("Not Supported");
+        setIsLocating(false);
+        return;
+    }
+
+    navigator.geolocation.getCurrentPosition(
+      async (position) => {
+        const { latitude, longitude } = position.coords;
+        try {
+            const response = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}&zoom=10&addressdetails=1`);
             const data = await response.json();
-            let locName = "Unknown Location";
-
-            if (data && data.address) {
-              locName = data.address.village || data.address.town || data.address.city || data.address.suburb || data.address.county || data.address.state_district || "Unknown Location";
-
-              // --- ENHANCED LANGUAGE DETECTION LOGIC ---
-              // Only automatically switch language if the user hasn't manually selected one yet
-              const manuallySelected = localStorage.getItem('agri_language');
-
-              if (!manuallySelected) {
-                const state = (data.address.state || '').toLowerCase();
-                const countryCode = (data.address.country_code || '').toLowerCase();
-
-                let detectedLang: Language | null = null;
-
-                // 1. Detect Spanish based on Country Code
-                const spanishCountries = ['es', 'mx', 'ar', 'co', 'cl', 'pe', 've', 'ec', 'bo', 'uy', 'py', 'gt', 'hn', 'sv', 'ni', 'cr', 'pa', 'do', 'pr'];
-                if (spanishCountries.includes(countryCode)) {
-                  detectedLang = Language.ES;
+            const address = data.address;
+            const loc = address.village || address.town || address.city || address.county || "Detected Location";
+            
+            setLocationName(loc);
+            localStorage.setItem('agri_location_name', loc);
+            
+            // IMPROVED AUTOMATIC LANGUAGE SWITCHING BY STATE
+            if (!localStorage.getItem('agri_language')) {
+                const state = (address.state || '').toLowerCase();
+                const countryCode = (address.country_code || '').toLowerCase();
+                
+                // Specific State Mapping for India
+                if (state.includes('tamil nadu')) {
+                    onLanguageChange(Language.TA);
+                } else if (state.includes('karnataka')) {
+                    onLanguageChange(Language.KN);
+                } else if (state.includes('kerala')) {
+                    onLanguageChange(Language.ML);
+                } else if (state.includes('maharashtra')) {
+                    onLanguageChange(Language.MR);
+                } else if (state.includes('gujarat')) {
+                    onLanguageChange(Language.GU);
+                } else if (state.includes('west bengal')) {
+                    onLanguageChange(Language.BN);
+                } else if (state.includes('punjab') || state.includes('haryana')) {
+                    onLanguageChange(Language.PA);
+                } else if (state.includes('telangana') || state.includes('andhra pradesh')) {
+                    onLanguageChange(Language.TE);
+                } else if (countryCode === 'in') {
+                    onLanguageChange(Language.HI); // Default for other parts of India
+                } else if (['es', 'mx', 'ar', 'co', 'cl', 'pe'].includes(countryCode)) {
+                    onLanguageChange(Language.ES);
                 }
-                // 2. Detect Indian Local Languages based on State
-                else if (countryCode === 'in') {
-                  // Telugu States
-                  if (state.includes('andhra') || state.includes('telangana')) {
-                    detectedLang = Language.TE;
-                  }
-                  // Hindi Belt States
-                  else if ([
-                    'delhi', 'uttar pradesh', 'madhya pradesh', 'rajasthan', 'haryana',
-                    'bihar', 'jharkhand', 'chhattisgarh', 'himachal pradesh', 'uttarakhand',
-                    'chandigarh'
-                  ].some(s => state.includes(s))) {
-                    detectedLang = Language.HI;
-                  }
-                }
-
-                if (detectedLang && detectedLang !== language) {
-                  onLanguageChange(detectedLang);
-                }
-              }
             }
 
-            setLocationName(locName);
-            localStorage.setItem('agri_location_name', locName);
-          } catch (error) {
-            console.error("Geocoding error", error);
+            if (currentUser) {
+              storageService.updateUser(currentUser.id, { lat: latitude, lng: longitude, location: loc });
+            }
+        } catch (e) {
             setLocationName(`${latitude.toFixed(2)}, ${longitude.toFixed(2)}`);
-          }
-          setIsLocating(false);
-        },
-        (error) => {
-          console.error("Geolocation error", error);
-          setLocationName("Location Unavailable");
-          setIsLocating(false);
         }
-      );
-    } else {
-      setLocationName("Not Supported");
-      setIsLocating(false);
-    }
-  };
+        setIsLocating(false);
+      },
+      () => {
+        setLocationName("Set Location");
+        setIsLocating(false);
+      },
+      { enableHighAccuracy: false, timeout: 10000, maximumAge: 60000 }
+    );
+  }, [t.detecting, isLocating, locationName, currentUser, onLanguageChange]);
+
+  useEffect(() => {
+    detectLocation();
+  }, [detectLocation]);
+
+  useEffect(() => {
+      if (currentUser?.id) {
+          const fetchNotifs = async () => {
+              const data = await storageService.getNotifications(currentUser.id);
+              setNotifications(data);
+          };
+          fetchNotifs();
+          const interval = setInterval(fetchNotifs, 15000);
+          return () => clearInterval(interval);
+      }
+  }, [currentUser]);
+
+  useEffect(() => {
+      if (currentUser) {
+          setEditForm({ name: currentUser.name, location: currentUser.location });
+      }
+  }, [currentUser]);
 
   const handleUpdateProfile = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!currentUser) return;
-
-    const updatedUser = await storageService.updateUser(currentUser.id, editForm);
-
-    if (updatedUser && onUserUpdate) {
-      onUserUpdate(updatedUser);
-      setShowProfile(false);
-      alert(t.profileUpdated);
-    } else if (!updatedUser && onUserUpdate) {
-      // Fallback for offline/demo mode where backend returns null
-      onUserUpdate({ ...currentUser, ...editForm });
-      setShowProfile(false);
-      alert(t.profileUpdated);
-    }
-  };
-
-  const getMainClass = () => {
-    return "flex-grow w-full max-w-lg mx-auto pb-20";
+      e.preventDefault();
+      if (!currentUser) return;
+      const updatedUser = await storageService.updateUser(currentUser.id, editForm);
+      if (updatedUser && onUserUpdate) {
+          onUserUpdate(updatedUser);
+          setShowProfile(false);
+      }
   };
 
   return (
     <div className="min-h-screen flex flex-col">
-      {/* FIXED GLOBAL HEADER */}
-      <header className="bg-white shadow-soft sticky top-0 z-50 px-5 py-4 flex justify-between items-center h-18 transition-all duration-300 border-b border-agri-gray-100">
-        {/* Left: Location */}
-        <div className="flex flex-col justify-center flex-1 cursor-pointer" onClick={detectLocation}>
-          <div className="flex items-center text-agri-green-700 font-bold text-xs uppercase tracking-wider mb-0.5">
-            <MapPin className="h-3.5 w-3.5 mr-1.5 text-agri-green-500" />
-            {isLocating ? t.detecting : t.location}
+      <header className="bg-white/80 backdrop-blur-md shadow-sm sticky top-0 z-50 px-4 py-3 flex justify-between items-center h-16 transition-all duration-300">
+        <div 
+          className="flex flex-col justify-center flex-1 cursor-pointer group" 
+          onClick={() => detectLocation(true)}
+          onMouseEnter={() => detectLocation()}
+        >
+          <div className="flex items-center text-agri-dark font-bold text-xs uppercase tracking-wider mb-0.5 group-hover:text-agri-green transition-colors">
+             <MapPinIcon className={`h-3 w-3 mr-1 text-agri-green ${isLocating ? 'animate-pulse' : ''}`} />
+             {isLocating ? "Locating..." : t.location}
           </div>
-          <div className="flex items-center text-sm font-bold text-agri-gray-900 truncate max-w-[150px]">
-            {locationName} <ChevronDown className="h-4 w-4 ml-1 text-agri-green-500" />
+          <div className="flex items-center text-sm font-bold text-gray-800 truncate max-w-[150px]">
+            {isLocating ? (
+                <span className="flex items-center text-agri-green">
+                    <LoaderIcon className="h-3 w-3 mr-1 animate-spin" /> {t.detecting}
+                </span>
+            ) : locationName} 
+            {!isLocating && <ChevronDownIcon className="h-4 w-4 ml-1 text-agri-green opacity-0 group-hover:opacity-100 transition-opacity" />}
           </div>
         </div>
 
-        {/* Right: Actions */}
-        <div className="flex items-center space-x-3">
-          {/* Notifications */}
-          {role !== UserRole.NONE && (
-            <div className="relative">
-              <button onClick={() => setShowNotif(!showNotif)} className="p-2.5 bg-agri-gray-50 rounded-full hover:bg-agri-green-50 hover:shadow-sm transition-all relative">
-                <Bell className="h-5 w-5 text-agri-gray-700" />
-                {notifications.length > 0 && (
-                  <span className="absolute top-1 right-1 h-2.5 w-2.5 bg-agri-green-500 rounded-full border-2 border-white"></span>
-                )}
+        <div className="flex items-center space-x-2">
+           {role !== UserRole.NONE && (
+               <div className="relative">
+                   <button onClick={() => setShowNotif(!showNotif)} className="p-2 bg-gray-100 rounded-full hover:bg-gray-200 relative">
+                       <BellIcon className="h-5 w-5 text-gray-600" />
+                       {notifications.length > 0 && (
+                           <span className="absolute top-0 right-0 h-2.5 w-2.5 bg-red-500 rounded-full border border-white"></span>
+                       )}
+                   </button>
+                   {showNotif && (
+                       <div className="absolute right-0 top-12 w-72 bg-white rounded-xl shadow-xl border border-gray-100 overflow-hidden z-[60]">
+                           <div className="bg-gray-50 px-4 py-2 border-b border-gray-100 font-bold text-sm text-gray-700">Notifications</div>
+                           <div className="max-h-60 overflow-y-auto">
+                               {notifications.length === 0 ? (
+                                   <div className="p-4 text-center text-xs text-gray-500">No new notifications</div>
+                               ) : (
+                                   notifications.map(n => (
+                                       <div key={n.id} className="p-3 border-b border-gray-50 hover:bg-gray-50">
+                                           <p className="text-sm text-gray-800">{n.message}</p>
+                                           <p className="text-[10px] text-gray-400 mt-1">{new Date(n.timestamp).toLocaleTimeString()}</p>
+                                       </div>
+                                   ))
+                               )}
+                           </div>
+                       </div>
+                   )}
+               </div>
+           )}
+
+           {role !== UserRole.NONE && (
+               <button onClick={() => setShowProfile(true)} className="p-2 bg-gray-100 rounded-full hover:bg-gray-200">
+                   <UserIconComp className="h-5 w-5 text-gray-600" />
+               </button>
+           )}
+
+           <div className="relative">
+             <select 
+                value={language}
+                onChange={(e) => onLanguageChange(e.target.value as Language)}
+                className="bg-gray-100/50 text-gray-700 text-sm font-bold py-1.5 px-3 rounded-lg border-none focus:ring-0 cursor-pointer outline-none appearance-none pr-8 max-w-[60px]"
+              >
+                {Object.keys(Language).map(key => (
+                  <option key={key} value={(Language as any)[key]}>{key}</option>
+                ))}
+             </select>
+             <ChevronDownIcon className="absolute right-2 top-2 h-3 w-3 text-gray-500 pointer-events-none" />
+           </div>
+           
+           {role !== UserRole.NONE && (
+              <button onClick={onLogout} className="text-gray-400 hover:text-red-500 bg-gray-100/50 p-1.5 rounded-full">
+                <LogOutIcon className="h-4 w-4" />
               </button>
-
-              {/* Dropdown */}
-              {showNotif && (
-                <div className="absolute right-0 top-14 w-80 bg-white rounded-2xl shadow-2xl border border-agri-gray-100 overflow-hidden z-[60]">
-                  <div className="bg-gradient-to-r from-agri-green-50 to-white px-5 py-3 border-b border-agri-gray-100 font-bold text-sm text-agri-gray-900">{t.notifications}</div>
-                  <div className="max-h-64 overflow-y-auto">
-                    {notifications.length === 0 ? (
-                      <div className="p-6 text-center text-sm text-agri-gray-500">{t.noNotifications}</div>
-                    ) : (
-                      notifications.map(n => (
-                        <div key={n.id} className="p-4 border-b border-agri-gray-50 hover:bg-agri-gray-50 transition-colors">
-                          <p className="text-sm text-agri-gray-800 font-medium">{n.message}</p>
-                          <p className="text-xs text-agri-gray-400 mt-1">{new Date(n.timestamp).toLocaleTimeString()}</p>
-                        </div>
-                      ))
-                    )}
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* Profile */}
-          {role !== UserRole.NONE && (
-            <button onClick={() => setShowProfile(true)} className="p-2.5 bg-agri-gray-50 rounded-full hover:bg-agri-green-50 hover:shadow-sm transition-all">
-              <UserIcon className="h-5 w-5 text-agri-gray-700" />
-            </button>
-          )}
-
-          {/* Language */}
-          <div className="relative">
-            <select
-              value={language}
-              onChange={(e) => onLanguageChange(e.target.value as Language)}
-              className="bg-agri-gray-50 text-agri-gray-800 text-sm font-bold py-2 px-3.5 rounded-lg border border-agri-gray-200 focus:ring-2 focus:ring-agri-green-500 cursor-pointer outline-none appearance-none pr-9 hover:bg-agri-gray-100 transition-all"
-            >
-              <option value={Language.EN}>EN</option>
-              <option value={Language.HI}>HI</option>
-              <option value={Language.TE}>TE</option>
-              <option value={Language.ES}>ES</option>
-            </select>
-            <ChevronDown className="absolute right-2.5 top-2.5 h-3.5 w-3.5 text-agri-gray-600 pointer-events-none" />
-          </div>
-
-          {role !== UserRole.NONE && (
-            <button onClick={onLogout} className="text-agri-gray-500 hover:text-red-500 bg-agri-gray-50 p-2 rounded-full hover:bg-red-50 transition-all">
-              <LogOut className="h-5 w-5" />
-            </button>
-          )}
+           )}
         </div>
       </header>
 
-      {/* Main Content Area */}
-      <main className={getMainClass()}>
+      <main className="flex-grow w-full max-w-lg mx-auto pb-20">
         {children}
       </main>
 
-      {/* Profile Modal */}
       {showProfile && (
-        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4 animate-in fade-in duration-200">
-          <div className="bg-white w-full max-w-md rounded-3xl p-7 shadow-2xl animate-scale-in">
-            <div className="flex justify-between items-center mb-6">
-              <h2 className="text-2xl font-bold flex items-center text-agri-gray-900"><Edit2 className="mr-2 h-6 w-6 text-agri-green-500" /> {t.editDetails}</h2>
-              <button onClick={() => setShowProfile(false)} className="bg-agri-gray-100 p-2.5 rounded-full hover:bg-agri-gray-200 transition-all"><X className="h-5 w-5 text-agri-gray-700" /></button>
-            </div>
-            <form onSubmit={handleUpdateProfile} className="space-y-5">
-              <div>
-                <label className="text-xs font-bold text-agri-gray-600 uppercase mb-2 block">{t.fullName}</label>
-                <input type="text" className="w-full border-2 border-agri-gray-200 rounded-xl p-3.5 mt-1 bg-agri-gray-50 focus:ring-2 focus:ring-agri-green-500 focus:border-agri-green-500 outline-none transition-all font-medium"
-                  value={editForm.name} onChange={e => setEditForm({ ...editForm, name: e.target.value })}
-                />
+          <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+              <div className="bg-white w-full max-w-sm rounded-2xl p-6 shadow-2xl animate-in zoom-in duration-200">
+                  <div className="flex justify-between items-center mb-6">
+                      <h2 className="text-xl font-bold flex items-center"><EditIcon className="mr-2 h-5 w-5"/> Edit Profile</h2>
+                      <button onClick={() => setShowProfile(false)} className="bg-gray-100 p-2 rounded-full"><XIcon className="h-5 w-5"/></button>
+                  </div>
+                  <form onSubmit={handleUpdateProfile} className="space-y-4">
+                      <div>
+                          <label className="text-xs font-bold text-gray-500 uppercase">Full Name</label>
+                          <input type="text" className="w-full border rounded-lg p-2 mt-1 bg-gray-50" 
+                              value={editForm.name} onChange={e => setEditForm({...editForm, name: e.target.value})}
+                          />
+                      </div>
+                      <div>
+                          <label className="text-xs font-bold text-gray-500 uppercase">Location</label>
+                          <input type="text" className="w-full border rounded-lg p-2 mt-1 bg-gray-50" 
+                              value={editForm.location} onChange={e => setEditForm({...editForm, location: e.target.value})}
+                          />
+                      </div>
+                      <button type="submit" className="w-full bg-agri-green text-white py-3 rounded-xl font-bold">Save Changes</button>
+                  </form>
               </div>
-              <div>
-                <label className="text-xs font-bold text-agri-gray-600 uppercase mb-2 block">{t.location}</label>
-                <input type="text" className="w-full border-2 border-agri-gray-200 rounded-xl p-3.5 mt-1 bg-agri-gray-50 focus:ring-2 focus:ring-agri-green-500 focus:border-agri-green-500 outline-none transition-all font-medium"
-                  value={editForm.location} onChange={e => setEditForm({ ...editForm, location: e.target.value })}
-                />
-              </div>
-              <button type="submit" className="w-full bg-agri-green-500 text-white py-4 rounded-xl font-bold shadow-green-lg hover:bg-agri-green-600 transition-all active:scale-95">{t.saveChanges}</button>
-            </form>
           </div>
-        </div>
       )}
     </div>
   );

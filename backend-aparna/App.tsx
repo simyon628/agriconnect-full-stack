@@ -6,35 +6,35 @@ import RoleSelection from './components/RoleSelection';
 import FarmerDashboard from './components/FarmerDashboard';
 import WorkerDashboard from './components/WorkerDashboard';
 import ProviderDashboard from './components/ProviderDashboard';
-
 import StoreDashboard from './components/StoreDashboard';
 
 const App: React.FC = () => {
-  // Initialize currentUser from localStorage
-  const [currentUser, setCurrentUser] = useState<User | null>(() => {
-    const savedUser = localStorage.getItem('agri_current_user');
-    if (savedUser) {
-      try {
-        return JSON.parse(savedUser);
-      } catch (e) {
-        console.error('Error parsing saved user:', e);
-        return null;
-      }
-    }
-    return null;
-  });
+  const [currentUser, setCurrentUser] = useState<User | null>(null);
 
-  // Initialize Language from LocalStorage or Default to EN
   const [language, setLanguage] = useState<Language>(() => {
+    // 1. Check saved preference
     const savedLang = localStorage.getItem('agri_language');
-    // Validate if savedLang is a valid Language enum
     if (savedLang && Object.values(Language).includes(savedLang as Language)) {
       return savedLang as Language;
     }
+
+    // 2. Detect from browser settings with expanded Indian support
+    const browserLang = navigator.language.toLowerCase();
+    if (browserLang.startsWith('hi')) return Language.HI;
+    if (browserLang.startsWith('te')) return Language.TE;
+    if (browserLang.startsWith('ta')) return Language.TA;
+    if (browserLang.startsWith('kn')) return Language.KN;
+    if (browserLang.startsWith('ml')) return Language.ML;
+    if (browserLang.startsWith('mr')) return Language.MR;
+    if (browserLang.startsWith('bn')) return Language.BN;
+    if (browserLang.startsWith('gu')) return Language.GU;
+    if (browserLang.startsWith('pa')) return Language.PA;
+    if (browserLang.startsWith('es')) return Language.ES;
+
+    // Default to English
     return Language.EN;
   });
 
-  // Wrapper to save language preference
   const handleLanguageChange = (lang: Language) => {
     setLanguage(lang);
     localStorage.setItem('agri_language', lang);
@@ -42,17 +42,14 @@ const App: React.FC = () => {
 
   const handleUserLogin = (user: User) => {
     setCurrentUser(user);
-    localStorage.setItem('agri_current_user', JSON.stringify(user));
   };
 
   const handleUserUpdate = (updatedUser: User) => {
     setCurrentUser(updatedUser);
-    localStorage.setItem('agri_current_user', JSON.stringify(updatedUser));
   };
 
   const handleLogout = () => {
     setCurrentUser(null);
-    localStorage.removeItem('agri_current_user');
   };
 
   const renderDashboard = () => {
@@ -76,19 +73,12 @@ const App: React.FC = () => {
 
   return (
     <div className="relative min-h-screen font-sans text-gray-900">
-      {/* Fixed Background Animation - Covers full screen always */}
-      <div className="fixed inset-0 w-full h-full overflow-hidden pointer-events-none z-0 bg-white">
-        {/* Soft Green Orb - Top Left */}
-        <div className="absolute top-[-15%] left-[-10%] w-[600px] h-[600px] bg-agri-green-100/50 rounded-full mix-blend-multiply filter blur-[100px] animate-blob"></div>
-
-        {/* Primary Green Orb - Top Right */}
-        <div className="absolute top-[10%] right-[-15%] w-[500px] h-[500px] bg-agri-green-200/40 rounded-full mix-blend-multiply filter blur-[90px] animate-blob animation-delay-2000"></div>
-
-        {/* Accent Green Orb - Bottom */}
-        <div className="absolute bottom-[-20%] left-[15%] w-[700px] h-[700px] bg-agri-green-100/30 rounded-full mix-blend-multiply filter blur-[110px] animate-blob animation-delay-4000"></div>
+      <div className="fixed inset-0 w-full h-full overflow-hidden pointer-events-none z-0 bg-gray-50">
+        <div className="absolute top-[-10%] left-[-10%] w-[500px] h-[500px] bg-yellow-200/40 rounded-full mix-blend-multiply filter blur-[80px] animate-blob"></div>
+        <div className="absolute top-[20%] right-[-10%] w-[400px] h-[400px] bg-green-200/40 rounded-full mix-blend-multiply filter blur-[80px] animate-blob animation-delay-2000"></div>
+        <div className="absolute bottom-[-10%] left-[20%] w-[600px] h-[600px] bg-blue-200/40 rounded-full mix-blend-multiply filter blur-[80px] animate-blob animation-delay-4000"></div>
       </div>
 
-      {/* Main App Layout - z-index ensures it sits on top of background */}
       <div className="relative z-10">
         <Layout
           role={currentUser?.role || UserRole.NONE}
