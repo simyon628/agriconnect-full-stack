@@ -4,13 +4,36 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>AgriConnect - Connecting Agriculture</title>
-
-  <!-- Google Fonts - Inter for modern typography -->
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap"
-    rel="stylesheet">
+  <title>AgriConnect</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            agri: {
+              green: '#10B981', // Emerald 500
+              light: '#ECFDF5', // Emerald 50
+              dark: '#064E3B',  // Emerald 900
+              accent: '#FBBF24', // Amber 400
+              teal: '#14B8A6'
+            }
+          },
+          animation: {
+            blob: "blob 7s infinite",
+          },
+          keyframes: {
+            blob: {
+              "0%": { transform: "translate(0px, 0px) scale(1)" },
+              "33%": { transform: "translate(30px, -50px) scale(1.1)" },
+              "66%": { transform: "translate(-20px, 20px) scale(0.9)" },
+              "100%": { transform: "translate(0px, 0px) scale(1)" }
+            }
+          }
+        }
+      }
+    }
+  </script>
 
   <style>
     .animation-delay-2000 {
@@ -22,41 +45,15 @@
     }
 
     body {
-      background-color: #FFFFFF;
-      font-family: 'Inter', system-ui, sans-serif;
-    }
-
-    /* Smooth scrolling */
-    html {
-      scroll-behavior: smooth;
-    }
-
-    /* Custom scrollbar */
-    ::-webkit-scrollbar {
-      width: 8px;
-      height: 8px;
-    }
-
-    ::-webkit-scrollbar-track {
-      background: #F5F5F5;
-    }
-
-    ::-webkit-scrollbar-thumb {
-      background: #22C55E;
-      border-radius: 4px;
-    }
-
-    ::-webkit-scrollbar-thumb:hover {
-      background: #16A34A;
+      background-color: #F9FAFB;
+      /* Gray 50 */
     }
   </style>
 </head>
 
 <body>
   <div id="root"></div>
-  <!-- reCAPTCHA container for Firebase Phone Auth -->
-  <div id="recaptcha-container"></div>
-  <script type="module" src="/index.tsx"></script>
+  <script type="module" src="./index.tsx"></script>
 </body>
 
 </html>
