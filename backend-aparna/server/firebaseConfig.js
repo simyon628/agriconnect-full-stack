@@ -4,12 +4,13 @@ const { getFirestore } = require("firebase/firestore");
 // Configuration from frontend/config.ts
 // Note: In a production environment, these should be environment variables.
 const firebaseConfig = {
-    apiKey: "AIzaSyCQGwqm7XI2CoHlFoXIBgd0KPqua9Ijyr0",
-    authDomain: "agriconnect-18c94.firebaseapp.com",
-    projectId: "agriconnect-18c94",
-    storageBucket: "agriconnect-18c94.firebasestorage.app",
-    messagingSenderId: "6646490296",
-    appId: "1:6646490296:web:cf7156fbc41f24afd5004d"
+    apiKey: "AIzaSyCFrwK1tF-i55N8sidQ9Sk5C6FbBjb7Ijc",
+    authDomain: "agriconnect-8c0f3.firebaseapp.com",
+    projectId: "agriconnect-8c0f3",
+    storageBucket: "agriconnect-8c0f3.firebasestorage.app",
+    messagingSenderId: "1059362325401",
+    appId: "1:1059362325401:web:add0ea71a8f999c2ed4908",
+    measurementId: "G-9PSDG89YP5"
 };
 
 const app = initializeApp(firebaseConfig);
