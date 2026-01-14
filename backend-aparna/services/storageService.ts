@@ -19,7 +19,7 @@ const saveLocalList = <T>(key: string, list: T[]) => {
   localStorage.setItem(key, JSON.stringify(list));
 };
 
-const fetchWithTimeout = async (url: string, options: RequestInit = {}, timeout = 4000) => {
+const fetchWithTimeout = async (url: string, options: RequestInit = {}, timeout = 1500) => {
   const controller = new AbortController();
   const id = setTimeout(() => controller.abort(), timeout);
   try {
@@ -32,132 +32,141 @@ const fetchWithTimeout = async (url: string, options: RequestInit = {}, timeout 
   }
 };
 
+const backgroundSync = async (url: string, options: RequestInit) => {
+  try {
+    await fetch(url, options); // No timeout needed for background sync, let it take its time
+  } catch (e) {
+    console.warn("Background sync failed:", e);
+  }
+};
+
 export const storageService = {
   getUserByPhone: async (phone: string): Promise<User | null> => {
+    // Reads still need to try network first to get fresh data, but with short timeout
     try {
-      const response = await fetchWithTimeout(`${API_URL}/users/lookup?phone=${phone}`);
-      if (response.ok) {
-        return await response.json();
-      }
+      const response = await fetchWithTimeout(`${API_URL}/users/lookup?phone=${phone}`, {}, 1500);
+      if (response.ok) return await response.json();
     } catch (error) {
-      console.log("Backend lookup failed/timeout, checking local.");
+      console.log("Backend lookup skipped (timeout/offline), checking local.");
     }
     const users = getLocalList<User>(LOCAL_USERS_KEY);
-    const user = users.find(u => u.phone === phone);
-    return user || null;
+    return users.find(u => u.phone === phone) || null;
   },
 
   saveUser: async (user: User): Promise<User> => {
-    try {
-      const response = await fetchWithTimeout(`${API_URL}/login`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(user)
-      });
-      if (!response.ok) throw new Error('Backend unavailable');
-      return await response.json();
-    } catch (error) {
-      console.log("Backend offline/timeout. Saving user locally.");
-      const users = getLocalList<User>(LOCAL_USERS_KEY);
-      const existingIdx = users.findIndex(u => u.phone === user.phone);
-      if (existingIdx >= 0) {
-        const updated = { ...users[existingIdx], ...user };
-        users[existingIdx] = updated;
-        saveLocalList(LOCAL_USERS_KEY, users);
-        return updated;
-      } else {
-        const newUser = { ...user, available: true };
-        users.push(newUser);
-        saveLocalList(LOCAL_USERS_KEY, users);
-        return newUser;
-      }
+    // 1. Optimistic: Save Local IMMEDIATELY
+    const users = getLocalList<User>(LOCAL_USERS_KEY);
+    const existingIdx = users.findIndex(u => u.phone === user.phone);
+    let savedUser = user;
+
+    if (existingIdx >= 0) {
+      savedUser = { ...users[existingIdx], ...user };
+      users[existingIdx] = savedUser;
+    } else {
+      savedUser = { ...user, available: true };
+      users.push(savedUser);
     }
+    saveLocalList(LOCAL_USERS_KEY, users);
+
+    // 2. Background: Sync to Backend (Fire & Forget)
+    backgroundSync(`${API_URL}/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(user)
+    });
+
+    // 3. Return Instant Result
+    return savedUser;
   },
 
   updateUser: async (id: string, updates: Partial<User>): Promise<User | null> => {
-    try {
-      const response = await fetchWithTimeout(`${API_URL}/users/${id}`, {
+    // 1. Optimistic Local Update
+    const users = getLocalList<User>(LOCAL_USERS_KEY);
+    const idx = users.findIndex(u => u.id === id);
+    let updatedUser: User | null = null;
+
+    if (idx !== -1) {
+      updatedUser = { ...users[idx], ...updates };
+      users[idx] = updatedUser;
+      saveLocalList(LOCAL_USERS_KEY, users);
+    }
+
+    // 2. Background Backend Update (if local update worked)
+    if (updatedUser) {
+      backgroundSync(`${API_URL}/users/${id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(updates)
       });
-      if (!response.ok) throw new Error('Backend unavailable');
-      return await response.json();
-    } catch (error) {
-      const users = getLocalList<User>(LOCAL_USERS_KEY);
-      const idx = users.findIndex(u => u.id === id);
-      if (idx !== -1) {
-        users[idx] = { ...users[idx], ...updates };
-        saveLocalList(LOCAL_USERS_KEY, users);
-        return users[idx];
-      }
-      return null;
     }
+
+    return updatedUser; // Return immediately
   },
 
   getWorkers: async (lat: number, lng: number, radius: number = 50): Promise<WorkerProfile[]> => {
     try {
-      const response = await fetchWithTimeout(`${API_URL}/workers?lat=${lat}&lng=${lng}&radius=${radius}`);
-      if (!response.ok) throw new Error('Backend unavailable');
-      const workers = await response.json();
-      return workers.map((u: any) => ({
-        id: u.id,
-        name: u.name,
-        phone: u.phone,
-        skills: ['General Labor'],
-        rating: 5.0,
-        distance: u.distance,
-        available: u.available !== undefined ? u.available : true,
-        image: `https://ui-avatars.com/api/?name=${encodeURIComponent(u.name)}&background=random`,
-        lat: u.lat,
-        lng: u.lng
-      }));
-    } catch (error) {
-      const localUsers = getLocalList<User>(LOCAL_USERS_KEY);
-      return localUsers
-        .filter(u => u.role === UserRole.WORKER)
-        .map(u => ({
+      const response = await fetchWithTimeout(`${API_URL}/workers?lat=${lat}&lng=${lng}&radius=${radius}`, {}, 1500);
+      if (response.ok) {
+        const workers = await response.json();
+        return workers.map((u: any) => ({
           id: u.id,
           name: u.name,
           phone: u.phone,
           skills: ['General Labor'],
           rating: 5.0,
-          distance: calculateDistance(lat, lng, u.lat, u.lng),
-          available: (u as any).available ?? true,
+          distance: u.distance,
+          available: u.available !== undefined ? u.available : true,
           image: `https://ui-avatars.com/api/?name=${encodeURIComponent(u.name)}&background=random`,
           lat: u.lat,
           lng: u.lng
-        }))
-        .filter(w => w.distance <= radius)
-        .sort((a, b) => a.distance - b.distance);
-    }
+        }));
+      }
+    } catch (e) { /* Fallback */ }
+
+    // Fallback to local
+    const localUsers = getLocalList<User>(LOCAL_USERS_KEY);
+    return localUsers
+      .filter(u => u.role === UserRole.WORKER)
+      .map(u => ({
+        id: u.id,
+        name: u.name,
+        phone: u.phone,
+        skills: ['General Labor'],
+        rating: 5.0,
+        distance: calculateDistance(lat, lng, u.lat, u.lng),
+        available: (u as any).available ?? true,
+        image: `https://ui-avatars.com/api/?name=${encodeURIComponent(u.name)}&background=random`,
+        lat: u.lat,
+        lng: u.lng
+      }))
+      .filter(w => w.distance <= radius)
+      .sort((a, b) => a.distance - b.distance);
   },
 
   getStores: async (lat: number, lng: number, radius: number = 50): Promise<any[]> => {
     try {
-      const response = await fetchWithTimeout(`${API_URL}/stores?lat=${lat}&lng=${lng}&radius=${radius}`);
-      if (!response.ok) throw new Error('Backend unavailable');
-      return await response.json();
-    } catch (error) {
-      const localUsers = getLocalList<User>(LOCAL_USERS_KEY);
-      const storeProductsMap = JSON.parse(localStorage.getItem(LOCAL_STORE_PRODUCTS_KEY) || '{}');
+      const response = await fetchWithTimeout(`${API_URL}/stores?lat=${lat}&lng=${lng}&radius=${radius}`, {}, 1500);
+      if (response.ok) return await response.json();
+    } catch (e) { /* Fallback */ }
 
-      return localUsers
-        .filter(u => u.role === UserRole.STORE)
-        .map(u => ({
-          id: u.id,
-          name: u.name,
-          phone: u.phone,
-          location: u.location,
-          shopImages: u.shopImages || [],
-          distance: calculateDistance(lat, lng, u.lat, u.lng),
-          products: storeProductsMap[u.id] || [],
-          lat: u.lat,
-          lng: u.lng
-        }))
-        .filter(s => s.distance <= radius)
-        .sort((a, b) => a.distance - b.distance);
-    }
+    const localUsers = getLocalList<User>(LOCAL_USERS_KEY);
+    const storeProductsMap = JSON.parse(localStorage.getItem(LOCAL_STORE_PRODUCTS_KEY) || '{}');
+
+    return localUsers
+      .filter(u => u.role === UserRole.STORE)
+      .map(u => ({
+        id: u.id,
+        name: u.name,
+        phone: u.phone,
+        location: u.location,
+        shopImages: u.shopImages || [],
+        distance: calculateDistance(lat, lng, u.lat, u.lng),
+        products: storeProductsMap[u.id] || [],
+        lat: u.lat,
+        lng: u.lng
+      }))
+      .filter(s => s.distance <= radius)
+      .sort((a, b) => a.distance - b.distance);
   },
 
   getStoreProducts: async (storeId: string): Promise<StoreProduct[]> => {
@@ -184,134 +193,128 @@ export const storageService = {
   },
 
   postJob: async (job: Job): Promise<Job> => {
-    try {
-      const response = await fetchWithTimeout(`${API_URL}/jobs`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(job)
-      });
-      if (!response.ok) throw new Error('Backend failed');
-      return await response.json();
-    } catch (error) {
-      const jobs = getLocalList<Job>(LOCAL_JOBS_KEY);
-      const newJob = { ...job, id: `job_local_${Date.now()}`, status: 'OPEN' as const };
-      jobs.push(newJob);
-      saveLocalList(LOCAL_JOBS_KEY, jobs);
-      return newJob;
-    }
+    // 1. Optimistic Local Save
+    const jobs = getLocalList<Job>(LOCAL_JOBS_KEY);
+    const newJob = { ...job, id: `job_local_${Date.now()}`, status: 'OPEN' as const };
+    jobs.push(newJob);
+    saveLocalList(LOCAL_JOBS_KEY, jobs);
+
+    // 2. Background Sync
+    backgroundSync(`${API_URL}/jobs`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(job)
+    });
+
+    return newJob;
   },
 
   updateJobStatus: async (id: string, status: string): Promise<void> => {
-    try {
-      await fetchWithTimeout(`${API_URL}/jobs/${id}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status })
-      });
-    } catch (error) {
-      const jobs = getLocalList<Job>(LOCAL_JOBS_KEY);
-      const idx = jobs.findIndex(j => j.id === id);
-      if (idx !== -1) {
-        jobs[idx].status = status as any;
-        saveLocalList(LOCAL_JOBS_KEY, jobs);
-      }
+    // 1. Optimistic Local Update
+    const jobs = getLocalList<Job>(LOCAL_JOBS_KEY);
+    const idx = jobs.findIndex(j => j.id === id);
+    if (idx !== -1) {
+      jobs[idx].status = status as any;
+      saveLocalList(LOCAL_JOBS_KEY, jobs);
     }
+
+    // 2. Background Sync
+    backgroundSync(`${API_URL}/jobs/${id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status })
+    });
   },
 
   deleteJob: async (id: string): Promise<void> => {
-    try {
-      await fetchWithTimeout(`${API_URL}/jobs/${id}`, {
-        method: 'DELETE'
-      });
-    } catch (error) {
-      const jobs = getLocalList<Job>(LOCAL_JOBS_KEY);
-      const filtered = jobs.filter(j => j.id !== id);
-      saveLocalList(LOCAL_JOBS_KEY, filtered);
-    }
+    // 1. Optimistic Local Delete
+    const jobs = getLocalList<Job>(LOCAL_JOBS_KEY);
+    const filtered = jobs.filter(j => j.id !== id);
+    saveLocalList(LOCAL_JOBS_KEY, filtered);
+
+    // 2. Background Sync
+    backgroundSync(`${API_URL}/jobs/${id}`, {
+      method: 'DELETE'
+    });
   },
 
   getJobs: async (lat: number, lng: number, radius: number = 50): Promise<Job[]> => {
     try {
-      const response = await fetchWithTimeout(`${API_URL}/jobs?lat=${lat}&lng=${lng}&radius=${radius}`);
-      if (!response.ok) throw new Error('Backend unavailable');
-      return await response.json();
-    } catch (error) {
-      const localJobsRaw = getLocalList<Job>(LOCAL_JOBS_KEY);
-      return localJobsRaw.map(j => ({
-        ...j,
-        distance: calculateDistance(lat, lng, j.lat, j.lng)
-      }))
-        .filter(j => j.distance <= radius && j.status === 'OPEN')
-        .sort((a, b) => a.distance - b.distance);
-    }
+      const response = await fetchWithTimeout(`${API_URL}/jobs?lat=${lat}&lng=${lng}&radius=${radius}`, {}, 1500);
+      if (response.ok) return await response.json();
+    } catch (e) { /* Fallback */ }
+
+    const localJobsRaw = getLocalList<Job>(LOCAL_JOBS_KEY);
+    return localJobsRaw.map(j => ({
+      ...j,
+      distance: calculateDistance(lat, lng, j.lat, j.lng)
+    }))
+      .filter(j => j.distance <= radius && j.status === 'OPEN')
+      .sort((a, b) => a.distance - b.distance);
   },
 
   getMyJobs: async (farmerId: string): Promise<Job[]> => {
     try {
-      const response = await fetchWithTimeout(`${API_URL}/jobs?farmerId=${farmerId}`);
-      if (!response.ok) throw new Error('Backend unavailable');
-      return await response.json();
-    } catch (error) {
-      const localJobs = getLocalList<Job>(LOCAL_JOBS_KEY);
-      return localJobs.filter(j => j.farmerId === farmerId);
-    }
+      const response = await fetchWithTimeout(`${API_URL}/jobs?farmerId=${farmerId}`, {}, 1500);
+      if (response.ok) return await response.json();
+    } catch (e) { /* Fallback */ }
+
+    const localJobs = getLocalList<Job>(LOCAL_JOBS_KEY);
+    return localJobs.filter(j => j.farmerId === farmerId);
   },
 
   addEquipment: async (item: Equipment) => {
-    try {
-      await fetchWithTimeout(`${API_URL}/equipment`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(item)
-      });
-    } catch (error) {
-      const equip = getLocalList<Equipment>(LOCAL_EQUIP_KEY);
-      const newItem = { ...item, id: `eq_local_${Date.now()}` };
-      equip.push(newItem);
-      saveLocalList(LOCAL_EQUIP_KEY, equip);
-    }
+    // 1. Optimistic Local Save
+    const equip = getLocalList<Equipment>(LOCAL_EQUIP_KEY);
+    const newItem = { ...item, id: `eq_local_${Date.now()}` };
+    equip.push(newItem);
+    saveLocalList(LOCAL_EQUIP_KEY, equip);
+
+    // 2. Background Sync
+    backgroundSync(`${API_URL}/equipment`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(item)
+    });
   },
 
   getEquipment: async (lat: number, lng: number, radius: number = 50): Promise<Equipment[]> => {
     try {
-      const response = await fetchWithTimeout(`${API_URL}/equipment?lat=${lat}&lng=${lng}&radius=${radius}`);
-      if (!response.ok) throw new Error('Backend unavailable');
-      return await response.json();
-    } catch (error) {
-      const localEquipRaw = getLocalList<Equipment>(LOCAL_EQUIP_KEY);
-      return localEquipRaw.map(e => ({
-        ...e,
-        distance: calculateDistance(lat, lng, e.lat, e.lng)
-      }))
-        .filter(e => e.distance <= radius)
-        .sort((a, b) => a.distance - b.distance);
-    }
+      const response = await fetchWithTimeout(`${API_URL}/equipment?lat=${lat}&lng=${lng}&radius=${radius}`, {}, 1500);
+      if (response.ok) return await response.json();
+    } catch (e) { /* Fallback */ }
+
+    const localEquipRaw = getLocalList<Equipment>(LOCAL_EQUIP_KEY);
+    return localEquipRaw.map(e => ({
+      ...e,
+      distance: calculateDistance(lat, lng, e.lat, e.lng)
+    }))
+      .filter(e => e.distance <= radius)
+      .sort((a, b) => a.distance - b.distance);
   },
 
   updateEquipment: async (id: string, updates: Partial<Equipment>): Promise<void> => {
-    try {
-      await fetchWithTimeout(`${API_URL}/equipment/${id}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(updates)
-      });
-    } catch (error) {
-      const equip = getLocalList<Equipment>(LOCAL_EQUIP_KEY);
-      const idx = equip.findIndex(e => e.id === id);
-      if (idx !== -1) {
-        equip[idx] = { ...equip[idx], ...updates };
-        saveLocalList(LOCAL_EQUIP_KEY, equip);
-      }
+    // 1. Optimistic Local Update
+    const equip = getLocalList<Equipment>(LOCAL_EQUIP_KEY);
+    const idx = equip.findIndex(e => e.id === id);
+    if (idx !== -1) {
+      equip[idx] = { ...equip[idx], ...updates };
+      saveLocalList(LOCAL_EQUIP_KEY, equip);
     }
+
+    // 2. Background Sync
+    backgroundSync(`${API_URL}/equipment/${id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(updates)
+    });
   },
 
   getNotifications: async (userId: string): Promise<Notification[]> => {
     try {
-      const response = await fetchWithTimeout(`${API_URL}/notifications?userId=${userId}`);
-      if (!response.ok) throw new Error('Backend unavailable');
-      return await response.json();
-    } catch (error) {
-      return [];
-    }
-  }
+      const response = await fetchWithTimeout(`${API_URL}/notifications?userId=${userId}`, {}, 1500);
+      if (response.ok) return await response.json();
+    } catch (e) { /* Fallback */ }
+    return [];
+  },
 };
