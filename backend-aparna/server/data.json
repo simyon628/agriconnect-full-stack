@@ -1,0 +1,177 @@
+{
+  "users": [
+    {
+      "id": "user_1766422808342",
+      "name": "TestUser",
+      "phone": "9998887777",
+      "role": "FARMER",
+      "location": "TestLoc",
+      "lat": 10,
+      "lng": 10,
+      "available": true
+    },
+    {
+      "id": "c17cd225-af00-4148-aad5-8154cbf7c672",
+      "name": "king",
+      "phone": "6666666666",
+      "role": "FARMER",
+      "location": "Vijayawada",
+      "lat": 16.4989734,
+      "lng": 80.6521139,
+      "available": true
+    },
+    {
+      "id": "38f56578-1cc2-4c57-ad21-2b673e6dacff",
+      "name": "68888888",
+      "phone": "8888888888",
+      "role": "WORKER",
+      "location": "Vijayawada",
+      "lat": 16.4989734,
+      "lng": 80.6521139,
+      "available": true
+    },
+    {
+      "id": "e0434d45-a806-4e3d-9cf0-e5a3f24e463b",
+      "name": "king",
+      "phone": "2212121212",
+      "role": "PROVIDER",
+      "location": "bhimavaram",
+      "lat": 16.5547094,
+      "lng": 81.4896715,
+      "available": true
+    },
+    {
+      "id": "697846bf-36c4-44dd-992a-a593b134574e",
+      "name": "hello",
+      "phone": "3222222222",
+      "role": "FARMER",
+      "location": "పెద అమిరం",
+      "lat": 16.543111,
+      "lng": 81.4969549,
+      "available": true
+    },
+    {
+      "id": "a4f090e3-c089-46b3-a377-fed572449691",
+      "name": "heloo",
+      "phone": "4444444444",
+      "role": "PROVIDER",
+      "location": "भीमावरम",
+      "lat": 16.5383751,
+      "lng": 81.5027082,
+      "available": true
+    },
+    {
+      "id": "a493be1b-6669-45e1-a126-fe8b6cb9fdf3",
+      "name": "hi",
+      "phone": "5555555555",
+      "role": "PROVIDER",
+      "location": "Uppargudem",
+      "lat": 16.5547094,
+      "lng": 81.4896715,
+      "available": true
+    },
+    {
+      "id": "50998bfc-f2c7-4b23-a8ad-49913b5ebef7",
+      "name": "hui",
+      "phone": "6305842257",
+      "role": "FARMER",
+      "location": "పెద అమిరం",
+      "lat": 16.5431094,
+      "lng": 81.4969427,
+      "available": true
+    }
+  ],
+  "jobs": [
+    {
+      "id": "job_1766423242769",
+      "farmerId": "c17cd225-af00-4148-aad5-8154cbf7c672",
+      "farmerName": "king",
+      "farmerPhone": "6666666666",
+      "workType": "harvest",
+      "wage": 6000,
+      "description": "",
+      "date": "12/22/2025",
+      "location": "Vijayawada",
+      "distance": 0,
+      "lat": 16.4989734,
+      "lng": 80.6521139,
+      "rating": 0,
+      "status": "OPEN"
+    },
+    {
+      "id": "job_1766423452314",
+      "farmerId": "c17cd225-af00-4148-aad5-8154cbf7c672",
+      "farmerName": "king",
+      "farmerPhone": "6666666666",
+      "workType": "harvest",
+      "wage": 23223,
+      "description": "",
+      "date": "12/22/2025",
+      "location": "Vijayawada",
+      "distance": 0,
+      "lat": 16.4989734,
+      "lng": 80.6521139,
+      "rating": 0,
+      "status": "OPEN"
+    },
+    {
+      "id": "job_1766474620591",
+      "farmerId": "697846bf-36c4-44dd-992a-a593b134574e",
+      "farmerName": "hello",
+      "farmerPhone": "3222222222",
+      "workType": "harvest",
+      "wage": 500,
+      "description": "",
+      "date": "12/23/2025",
+      "location": "పెద అమిరం",
+      "distance": 0,
+      "lat": 16.543111,
+      "lng": 81.4969549,
+      "rating": 0,
+      "status": "OPEN"
+    },
+    {
+      "id": "job_1766475728482",
+      "farmerId": "50998bfc-f2c7-4b23-a8ad-49913b5ebef7",
+      "farmerName": "hui",
+      "farmerPhone": "6305842257",
+      "workType": "hi",
+      "wage": 666,
+      "description": "",
+      "date": "12/23/2025",
+      "location": "పెద అమిరం",
+      "distance": 0,
+      "lat": 16.5431094,
+      "lng": 81.4969427,
+      "rating": 0,
+      "status": "OPEN"
+    }
+  ],
+  "equipment": [
+    {
+      "providerId": "e0434d45-a806-4e3d-9cf0-e5a3f24e463b",
+      "name": "Manual Tractor",
+      "type": "Tractor",
+      "rentPerDay": 500,
+      "available": true,
+      "location": "bhimavaram",
+      "lat": 16.5547094,
+      "lng": 81.4896715,
+      "image": "https://via.placeholder.com/150",
+      "manufacturer": "Mahindra",
+      "model": "575",
+      "id": "equip_1766475322457"
+    }
+  ],
+  "notifications": [
+    {
+      "id": "notif_1766423484381_0.37323005142471644",
+      "userId": "c17cd225-af00-4148-aad5-8154cbf7c672",
+      "message": "New worker 68888888 joined near Vijayawada",
+      "type": "WORKER",
+      "read": false,
+      "timestamp": 1766423484381
+    }
+  ],
+  "storeProducts": {}
+}

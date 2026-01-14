@@ -1,0 +1,8 @@
+{
+  "name": "AgriConnect",
+  "description": "A comprehensive platform connecting Farmers, Agricultural Workers, and Equipment Providers to streamline farming operations.",
+  "requestFramePermissions": [
+    "geolocation",
+    "camera"
+  ]
+}
