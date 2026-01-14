@@ -76,7 +76,7 @@ export const storageService = {
 
   updateUser: async (id: string, updates: Partial<User>): Promise<User | null> => {
     try {
-      const response = await fetch(`${API_URL}/users/${id}`, {
+      const response = await fetchWithTimeout(`${API_URL}/users/${id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(updates)
@@ -97,7 +97,7 @@ export const storageService = {
 
   getWorkers: async (lat: number, lng: number, radius: number = 50): Promise<WorkerProfile[]> => {
     try {
-      const response = await fetch(`${API_URL}/workers?lat=${lat}&lng=${lng}&radius=${radius}`);
+      const response = await fetchWithTimeout(`${API_URL}/workers?lat=${lat}&lng=${lng}&radius=${radius}`);
       if (!response.ok) throw new Error('Backend unavailable');
       const workers = await response.json();
       return workers.map((u: any) => ({
@@ -135,7 +135,7 @@ export const storageService = {
 
   getStores: async (lat: number, lng: number, radius: number = 50): Promise<any[]> => {
     try {
-      const response = await fetch(`${API_URL}/stores?lat=${lat}&lng=${lng}&radius=${radius}`);
+      const response = await fetchWithTimeout(`${API_URL}/stores?lat=${lat}&lng=${lng}&radius=${radius}`);
       if (!response.ok) throw new Error('Backend unavailable');
       return await response.json();
     } catch (error) {
@@ -185,7 +185,7 @@ export const storageService = {
 
   postJob: async (job: Job): Promise<Job> => {
     try {
-      const response = await fetch(`${API_URL}/jobs`, {
+      const response = await fetchWithTimeout(`${API_URL}/jobs`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(job)
@@ -203,7 +203,7 @@ export const storageService = {
 
   updateJobStatus: async (id: string, status: string): Promise<void> => {
     try {
-      await fetch(`${API_URL}/jobs/${id}`, {
+      await fetchWithTimeout(`${API_URL}/jobs/${id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status })
@@ -220,7 +220,7 @@ export const storageService = {
 
   deleteJob: async (id: string): Promise<void> => {
     try {
-      await fetch(`${API_URL}/jobs/${id}`, {
+      await fetchWithTimeout(`${API_URL}/jobs/${id}`, {
         method: 'DELETE'
       });
     } catch (error) {
@@ -232,7 +232,7 @@ export const storageService = {
 
   getJobs: async (lat: number, lng: number, radius: number = 50): Promise<Job[]> => {
     try {
-      const response = await fetch(`${API_URL}/jobs?lat=${lat}&lng=${lng}&radius=${radius}`);
+      const response = await fetchWithTimeout(`${API_URL}/jobs?lat=${lat}&lng=${lng}&radius=${radius}`);
       if (!response.ok) throw new Error('Backend unavailable');
       return await response.json();
     } catch (error) {
@@ -248,7 +248,7 @@ export const storageService = {
 
   getMyJobs: async (farmerId: string): Promise<Job[]> => {
     try {
-      const response = await fetch(`${API_URL}/jobs?farmerId=${farmerId}`);
+      const response = await fetchWithTimeout(`${API_URL}/jobs?farmerId=${farmerId}`);
       if (!response.ok) throw new Error('Backend unavailable');
       return await response.json();
     } catch (error) {
@@ -259,7 +259,7 @@ export const storageService = {
 
   addEquipment: async (item: Equipment) => {
     try {
-      await fetch(`${API_URL}/equipment`, {
+      await fetchWithTimeout(`${API_URL}/equipment`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(item)
@@ -274,7 +274,7 @@ export const storageService = {
 
   getEquipment: async (lat: number, lng: number, radius: number = 50): Promise<Equipment[]> => {
     try {
-      const response = await fetch(`${API_URL}/equipment?lat=${lat}&lng=${lng}&radius=${radius}`);
+      const response = await fetchWithTimeout(`${API_URL}/equipment?lat=${lat}&lng=${lng}&radius=${radius}`);
       if (!response.ok) throw new Error('Backend unavailable');
       return await response.json();
     } catch (error) {
@@ -290,7 +290,7 @@ export const storageService = {
 
   updateEquipment: async (id: string, updates: Partial<Equipment>): Promise<void> => {
     try {
-      await fetch(`${API_URL}/equipment/${id}`, {
+      await fetchWithTimeout(`${API_URL}/equipment/${id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(updates)
@@ -307,7 +307,7 @@ export const storageService = {
 
   getNotifications: async (userId: string): Promise<Notification[]> => {
     try {
-      const response = await fetch(`${API_URL}/notifications?userId=${userId}`);
+      const response = await fetchWithTimeout(`${API_URL}/notifications?userId=${userId}`);
       if (!response.ok) throw new Error('Backend unavailable');
       return await response.json();
     } catch (error) {
