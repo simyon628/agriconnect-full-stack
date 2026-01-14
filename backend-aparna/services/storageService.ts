@@ -19,15 +19,28 @@ const saveLocalList = <T>(key: string, list: T[]) => {
   localStorage.setItem(key, JSON.stringify(list));
 };
 
+const fetchWithTimeout = async (url: string, options: RequestInit = {}, timeout = 4000) => {
+  const controller = new AbortController();
+  const id = setTimeout(() => controller.abort(), timeout);
+  try {
+    const response = await fetch(url, { ...options, signal: controller.signal });
+    clearTimeout(id);
+    return response;
+  } catch (error) {
+    clearTimeout(id);
+    throw error;
+  }
+};
+
 export const storageService = {
   getUserByPhone: async (phone: string): Promise<User | null> => {
     try {
-      const response = await fetch(`${API_URL}/users/lookup?phone=${phone}`);
+      const response = await fetchWithTimeout(`${API_URL}/users/lookup?phone=${phone}`);
       if (response.ok) {
         return await response.json();
       }
     } catch (error) {
-      console.log("Backend lookup failed, checking local.");
+      console.log("Backend lookup failed/timeout, checking local.");
     }
     const users = getLocalList<User>(LOCAL_USERS_KEY);
     const user = users.find(u => u.phone === phone);
@@ -36,7 +49,7 @@ export const storageService = {
 
   saveUser: async (user: User): Promise<User> => {
     try {
-      const response = await fetch(`${API_URL}/login`, {
+      const response = await fetchWithTimeout(`${API_URL}/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(user)
@@ -44,7 +57,7 @@ export const storageService = {
       if (!response.ok) throw new Error('Backend unavailable');
       return await response.json();
     } catch (error) {
-      console.log("Backend offline. Saving user locally.");
+      console.log("Backend offline/timeout. Saving user locally.");
       const users = getLocalList<User>(LOCAL_USERS_KEY);
       const existingIdx = users.findIndex(u => u.phone === user.phone);
       if (existingIdx >= 0) {
